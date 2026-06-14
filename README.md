@@ -13,3 +13,19 @@ ml/                  AI, document parsing, prompts, and experiments
 docs/                API notes, design assets, and technical documentation
 infra/               Docker, deployment, and infrastructure configuration
 .github/workflows/   CI/CD workflows
+```
+
+## Main modules
+
+- Teacher profile
+- File upload
+- Slide/test generation
+- Test editing
+- Test sharing with students
+- Student test passing
+- Partial answer verification
+- Lecture summary generation
+
+## Status
+
+Initial technical skeleton.
