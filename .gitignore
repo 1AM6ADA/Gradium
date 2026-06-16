@@ -27,3 +27,9 @@ backend/edutest.db
 .idea/
 *.suo
 *.sln
+
+.next/
+out/
+
+build/
+

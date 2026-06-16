@@ -1,69 +1,85 @@
-import os
-from typing import Optional
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Optional, Tuple
 
 
-def extract_text_from_file(file_path: str, filename: str) -> str:
-    ext = os.path.splitext(filename)[1].lower()
+class UnsupportedGenerationFileType(ValueError):
+    pass
+
+
+class PresentationConversionError(RuntimeError):
+    pass
+
+
+def prepare_pdf_for_gemini(file_path: str, filename: str, output_dir: Optional[str] = None) -> Tuple[str, bool]:
+    """Return a PDF path ready for Gemini question generation.
+
+    Uploaded PDF files are used directly.
+    Uploaded PPTX/PPT files are converted to PDF first.
+    Gemini receives only PDF bytes.
+    """
+    ext = Path(filename).suffix.lower()
 
     if ext == ".pdf":
-        return _extract_pdf(file_path)
-    elif ext in (".pptx", ".ppt"):
-        return _extract_pptx(file_path)
-    elif ext in (".odp",):
-        return _extract_odp_as_fallback(file_path)
-    elif ext in (".txt", ".md"):
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
-    elif ext in (".png", ".jpg", ".jpeg", ".webp"):
-        return f"[Image file: {filename}]"
-    else:
-        return ""
+        return file_path, False
+
+    if ext in {".pptx", ".ppt"}:
+        if output_dir is None:
+            output_dir = str(Path(file_path).parent)
+        return convert_presentation_to_pdf(file_path, output_dir), True
+
+    raise UnsupportedGenerationFileType(
+        "Only PDF and PPTX/PPT files are supported for AI question generation."
+    )
 
 
-def _extract_pdf(file_path: str) -> str:
+def convert_presentation_to_pdf(file_path: str, output_dir: str) -> str:
+    """Convert PPTX/PPT to PDF with LibreOffice/soffice."""
+    office_bin = shutil.which("soffice") or shutil.which("libreoffice")
+    if not office_bin:
+        raise PresentationConversionError(
+            "LibreOffice is not installed. Install it on the server to convert PPTX/PPT to PDF."
+        )
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    input_path = Path(file_path)
+
+    command = [
+        office_bin,
+        "--headless",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        output_dir,
+        str(input_path),
+    ]
+
     try:
-        import fitz  # PyMuPDF
-        doc = fitz.open(file_path)
-        pages = []
-        for i, page in enumerate(doc):
-            text = page.get_text("text")
-            if text.strip():
-                pages.append(f"--- Page {i+1} ---\n{text}")
-        doc.close()
-        return "\n\n".join(pages)
-    except Exception as e:
-        return f"[PDF extraction error: {e}]"
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PresentationConversionError("PPTX/PPT to PDF conversion timed out.") from exc
 
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "Unknown LibreOffice error").strip()
+        raise PresentationConversionError(f"PPTX/PPT to PDF conversion failed: {details}")
 
-def _extract_pptx(file_path: str) -> str:
-    try:
-        from pptx import Presentation
-        prs = Presentation(file_path)
-        slides = []
-        for i, slide in enumerate(prs.slides):
-            texts = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    texts.append(shape.text.strip())
-            if texts:
-                slides.append(f"--- Slide {i+1} ---\n" + "\n".join(texts))
-        return "\n\n".join(slides)
-    except Exception as e:
-        return f"[PPTX extraction error: {e}]"
+    expected_pdf = Path(output_dir) / f"{input_path.stem}.pdf"
+    if expected_pdf.exists():
+        return str(expected_pdf)
 
+    pdf_candidates = sorted(
+        Path(output_dir).glob("*.pdf"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if pdf_candidates:
+        return str(pdf_candidates[0])
 
-def _extract_odp_as_fallback(file_path: str) -> str:
-    try:
-        import zipfile
-        from xml.etree import ElementTree as ET
-        texts = []
-        with zipfile.ZipFile(file_path, "r") as z:
-            with z.open("content.xml") as f:
-                tree = ET.parse(f)
-                root = tree.getroot()
-                for elem in root.iter():
-                    if elem.text and elem.text.strip():
-                        texts.append(elem.text.strip())
-        return "\n".join(texts)
-    except Exception as e:
-        return f"[ODP extraction error: {e}]"
+    raise PresentationConversionError("LibreOffice finished but no PDF file was produced.")

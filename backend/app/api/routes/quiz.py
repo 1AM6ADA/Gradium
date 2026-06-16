@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List
-import os, aiofiles, random, string
+import os, aiofiles, random, string, uuid
 
 from app.database import get_db
 from app.models.user import User
@@ -13,8 +13,12 @@ from app.schemas.quiz import (
 )
 from app.schemas.session import SessionOut
 from app.api.deps import get_current_user, require_premium
-from app.services.file_service import extract_text_from_file
-from app.services.ai_service import generate_questions_from_text
+from app.services.file_service import (
+    PresentationConversionError,
+    UnsupportedGenerationFileType,
+    prepare_pdf_for_gemini,
+)
+from app.services.ai_service import AIServiceError, generate_questions_from_presentation_pdf
 from app.config import settings
 
 router = APIRouter()
@@ -129,20 +133,44 @@ async def generate_from_slides(
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
 
+    original_ext = os.path.splitext(file.filename or "")[1].lower()
+    if original_ext not in {".pdf", ".pptx", ".ppt"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF and PPTX/PPT files are supported for AI generation",
+        )
+
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
+    safe_filename = f"{uuid.uuid4().hex}{original_ext}"
+    file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
+    pdf_path = None
+    remove_converted_pdf = False
+
     async with aiofiles.open(file_path, "wb") as f:
         content = await file.read()
         await f.write(content)
 
     try:
-        text = extract_text_from_file(file_path, file.filename)
-        if not text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from file")
-        questions = await generate_questions_from_text(text, num_questions)
+        pdf_path, remove_converted_pdf = prepare_pdf_for_gemini(
+            file_path=file_path,
+            filename=file.filename or safe_filename,
+            output_dir=settings.UPLOAD_DIR,
+        )
+        questions = await generate_questions_from_presentation_pdf(pdf_path, num_questions)
+    except UnsupportedGenerationFileType as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except PresentationConversionError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except AIServiceError as e:
+        raise HTTPException(status_code=502, detail=f"AI generation failed: {e}") from e
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+        if remove_converted_pdf and pdf_path and os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+    if not questions:
+        raise HTTPException(status_code=502, detail="AI generated no valid questions")
 
     created = []
     for i, q_data in enumerate(questions):

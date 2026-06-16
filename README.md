@@ -26,6 +26,9 @@ infra/               Docker, deployment, and infrastructure configuration
 - Partial answer verification
 - Lecture summary generation
 
-## Status
+## How to launch
 
-Initial technical skeleton.
+- Install everything from `backend/requirements.txt`
+- Launch `setup.sh`
+- Launch `start.sh`
+
