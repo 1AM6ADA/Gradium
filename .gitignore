@@ -9,6 +9,11 @@ frontend/.env
 frontend/.env.local
 frontend/.eslintcache
 
+# Environment / secrets
+.env
+.env.local
+*.env.local
+
 __pycache__/
 *.pyc
 *.pyo
@@ -18,6 +23,9 @@ backend/env/
 backend/venv/
 backend/.env
 backend/.pytest_cache/
+
+# Uploaded files (runtime artifacts)
+backend/uploads/
 
 backend/edutest.db
 *.db
