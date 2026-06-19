@@ -21,8 +21,12 @@ interface Quiz {
 }
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.4 } }),
+  hidden: { opacity: 0, y: 30 },
+  visible: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.06, duration: 0.55, ease: [0.21, 0.47, 0.32, 0.98] },
+  }),
 };
 
 export default function DashboardPage() {
@@ -198,7 +202,7 @@ export default function DashboardPage() {
                 animate="visible"
                 variants={fadeUp}
                 custom={i}
-                className="card p-6 group hover:scale-[1.01] transition-transform"
+                className="card p-6 group hover:-translate-y-1.5 transition-transform duration-300"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center">
