@@ -172,6 +172,21 @@ async def teacher_ws(code: str, ws: WebSocket):
                     await manager.broadcast_to_students(code, end_payload)
                     await ws.send_json(end_payload)
 
+                elif msg_type == "reveal":
+                    # Teacher reveals the correct answer for the current question.
+                    # Every connected student learns the correct option; those who
+                    # answered also learn whether they were right and their score.
+                    if session.status != "active":
+                        continue
+                    revealed = await _reveal_current_question(db, session, code)
+                    if revealed:
+                        q_id, correct_answer = revealed
+                        await ws.send_json({
+                            "type": "revealed",
+                            "question_id": q_id,
+                            "correct_answer": correct_answer,
+                        })
+
                 elif msg_type == "get_stats":
                     if session.status == "active":
                         q_id = data.get("question_id")
@@ -255,11 +270,11 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                         participant.score += points
                     db.commit()
 
+                    # Acknowledge the lock-in only — correctness stays hidden
+                    # until the teacher chooses to reveal it.
                     await ws.send_json({
-                        "type": "answer_result",
-                        "correct": is_correct,
-                        "correct_answer": question.correct_answer,
-                        "points": participant.score,
+                        "type": "answer_locked",
+                        "question_id": q_id,
                     })
 
                     # Update teacher stats
@@ -279,6 +294,34 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
     finally:
         manager.disconnect_student(code, participant_id)
         db.close()
+
+
+async def _reveal_current_question(db, session: QuizSession, code: str):
+    """Push the correct answer for the current question to every connected
+    student. Returns (question_id, correct_answer) or None if unavailable."""
+    questions = sorted(session.quiz.questions, key=lambda q: q.order)
+    idx = session.current_question_index
+    if idx < 0 or idx >= len(questions):
+        return None
+    q = questions[idx]
+
+    for pid in list(manager.students.get(code, {}).keys()):
+        participant = db.query(Participant).filter(Participant.id == pid).first()
+        answer = db.query(Answer).filter(
+            Answer.participant_id == pid,
+            Answer.question_id == q.id,
+        ).first()
+        await manager.send_to_student(code, pid, {
+            "type": "reveal",
+            "question_id": q.id,
+            "correct_answer": q.correct_answer,
+            "your_answer": answer.answer if answer else None,
+            "correct": bool(answer.is_correct) if answer else False,
+            "answered": answer is not None,
+            "points": participant.score if participant else 0,
+        })
+
+    return q.id, q.correct_answer
 
 
 def _build_leaderboard(session: QuizSession) -> list:

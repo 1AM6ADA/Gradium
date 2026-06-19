@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Play, ChevronRight, Trophy, Square, QrCode,
-  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff
+  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff, Eye
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { WS_URL } from "@/lib/api";
@@ -46,6 +46,7 @@ export default function LiveQuizPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [revealed, setRevealed] = useState(false);
 
   const handleMessage = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
@@ -61,10 +62,13 @@ export default function LiveQuizPage() {
       setPhase("question");
       setStats(null);
       setAnsweredCount(0);
+      setRevealed(false);
       setTimeLeft(q.time_limit);
     } else if (type === "stats") {
       setStats(data.stats as { options: Record<number, number>; total_answers: number });
       setAnsweredCount(data.answered_count as number ?? 0);
+    } else if (type === "revealed") {
+      setRevealed(true);
     } else if (type === "quiz_ended") {
       setLeaderboard(data.leaderboard as LeaderboardEntry[]);
       setPhase("ended");
@@ -269,6 +273,21 @@ export default function LiveQuizPage() {
                   <h3 className="font-semibold text-slate-300 mb-3 text-sm">Controls</h3>
                   <div className="space-y-2">
                     <button
+                      onClick={() => { send({ type: "reveal" }); setRevealed(true); }}
+                      disabled={revealed}
+                      className={`w-full transition-colors ${
+                        revealed
+                          ? "btn-secondary opacity-70 cursor-default"
+                          : "inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl"
+                      }`}
+                    >
+                      {revealed ? (
+                        <><Check className="w-4 h-4" />Answers revealed</>
+                      ) : (
+                        <><Eye className="w-4 h-4" />Reveal answers</>
+                      )}
+                    </button>
+                    <button
                       onClick={() => send({ type: "next" })}
                       className="btn-primary w-full"
                     >
@@ -282,6 +301,11 @@ export default function LiveQuizPage() {
                       <Square className="w-4 h-4" />End quiz now
                     </button>
                   </div>
+                  {!revealed && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Students see only that their answer is locked until you reveal.
+                    </p>
+                  )}
                 </div>
 
                 {stats && (
