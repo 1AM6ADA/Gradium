@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy import text, inspect
 import os
 
 from app.database import engine, Base
@@ -10,9 +11,42 @@ from app.api.routes import auth, quiz, student, websocket
 import app.models  # noqa: F401 — ensure all models are registered before create_all
 
 
+# Columns added after the original schema shipped. SQLite's create_all() does
+# not ALTER existing tables, so we add any missing columns idempotently on boot
+# (lightweight migration that preserves existing data).
+_ADDED_COLUMNS = {
+    "quizzes": [
+        ("attendance_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("speed_bonus", "BOOLEAN NOT NULL DEFAULT 1"),
+        ("streak_bonus", "BOOLEAN NOT NULL DEFAULT 0"),
+    ],
+    "questions": [
+        ("points", "INTEGER NOT NULL DEFAULT 1000"),
+    ],
+    "participants": [
+        ("email", "VARCHAR"),
+        ("current_streak", "INTEGER NOT NULL DEFAULT 0"),
+    ],
+}
+
+
+def _run_lightweight_migrations() -> None:
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, columns in _ADDED_COLUMNS.items():
+            if table not in existing_tables:
+                continue
+            present = {col["name"] for col in inspector.get_columns(table)}
+            for name, ddl in columns:
+                if name not in present:
+                    conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}'))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_lightweight_migrations()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     yield
 

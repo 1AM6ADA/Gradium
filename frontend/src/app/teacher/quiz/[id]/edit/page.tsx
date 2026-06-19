@@ -6,7 +6,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Check, X, Play, Upload,
-  Sparkles, GripVertical, Clock, AlertCircle, Loader2, ChevronDown, ChevronUp
+  Sparkles, GripVertical, Clock, AlertCircle, Loader2, ChevronDown, ChevronUp,
+  SlidersHorizontal, Trophy
 } from "lucide-react";
 import { quizApi } from "@/lib/api";
 import Navbar from "@/components/layout/navbar";
@@ -17,6 +18,7 @@ interface Question {
   options: string[];
   correct_answer: number;
   time_limit: number;
+  points: number;
   order: number;
 }
 
@@ -24,10 +26,13 @@ interface Quiz {
   id: number;
   title: string;
   description: string;
+  attendance_enabled: boolean;
+  speed_bonus: boolean;
+  streak_bonus: boolean;
   questions: Question[];
 }
 
-const BLANK_Q = { text: "", options: ["", "", "", ""], correct_answer: 0, time_limit: 30 };
+const BLANK_Q = { text: "", options: ["", "", "", ""], correct_answer: 0, time_limit: 30, points: 1000 };
 
 export default function EditQuizPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,8 +59,26 @@ export default function EditQuizPage() {
 
   const startEdit = (q: Question) => {
     setEditingId(q.id);
-    setForm({ text: q.text, options: [...q.options], correct_answer: q.correct_answer, time_limit: q.time_limit });
+    setForm({ text: q.text, options: [...q.options], correct_answer: q.correct_answer, time_limit: q.time_limit, points: q.points ?? 1000 });
     setError("");
+  };
+
+  // Quiz settings (attendance + scoring)
+  const updateSetting = async (patch: Partial<Pick<Quiz, "attendance_enabled" | "speed_bonus" | "streak_bonus">>) => {
+    if (!quiz) return;
+    const prevQuiz = quiz;
+    setQuiz({ ...quiz, ...patch });
+    try {
+      await quizApi.update(quiz.id, patch);
+    } catch {
+      setQuiz(prevQuiz); // revert on failure
+    }
+  };
+
+  const applyPointsToAll = async (points: number) => {
+    if (!quiz) return;
+    await Promise.all(quiz.questions.map((q) => quizApi.updateQuestion(quiz.id, q.id, { points })));
+    setQuiz({ ...quiz, questions: quiz.questions.map((q) => ({ ...q, points })) });
   };
 
   const startNew = () => {
@@ -210,6 +233,49 @@ export default function EditQuizPage() {
           )}
         </AnimatePresence>
 
+        {/* Quiz settings: attendance + scoring */}
+        {quiz && (
+          <div className="card p-5 mb-6">
+            <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-primary-600" />Quiz settings
+            </h3>
+            <div className="space-y-1">
+              <SettingToggle
+                title="Attendance"
+                desc="Require students to enter an email so you can export a roster (CSV)."
+                checked={quiz.attendance_enabled}
+                onChange={(v) => updateSetting({ attendance_enabled: v })}
+              />
+              <SettingToggle
+                title="Speed bonus"
+                desc="Faster correct answers earn more points. Turn off for fixed points."
+                checked={quiz.speed_bonus}
+                onChange={(v) => updateSetting({ speed_bonus: v })}
+              />
+              <SettingToggle
+                title="Streak bonus"
+                desc="Consecutive correct answers add a multiplier (up to 2×)."
+                checked={quiz.streak_bonus}
+                onChange={(v) => updateSetting({ streak_bonus: v })}
+              />
+            </div>
+            {quiz.questions.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Set the same points for every question:</span>
+                {[500, 1000, 2000].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => applyPointsToAll(p)}
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/30 transition-colors"
+                  >
+                    {p} pts
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Questions */}
         <div className="space-y-3">
           {quiz?.questions.map((q, idx) => (
@@ -250,9 +316,12 @@ export default function EditQuizPage() {
                         </div>
                       ))}
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-3 mt-2">
                       <span className="text-xs text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />{q.time_limit}s
+                      </span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
+                        <Trophy className="w-3 h-3" />{q.points ?? 1000} pts
                       </span>
                     </div>
                   </div>
@@ -355,16 +424,30 @@ function QuestionForm({
             <p className="text-xs text-slate-400 mt-1">Click the letter to mark correct answer</p>
           </div>
         </div>
-        <div>
-          <label className="label text-xs">Time limit (seconds)</label>
-          <input
-            type="number"
-            min={5}
-            max={300}
-            className="input w-32"
-            value={form.time_limit}
-            onChange={(e) => setForm((f) => ({ ...f, time_limit: Number(e.target.value) }))}
-          />
+        <div className="flex gap-4">
+          <div>
+            <label className="label text-xs">Time limit (seconds)</label>
+            <input
+              type="number"
+              min={5}
+              max={300}
+              className="input w-32"
+              value={form.time_limit}
+              onChange={(e) => setForm((f) => ({ ...f, time_limit: Number(e.target.value) }))}
+            />
+          </div>
+          <div>
+            <label className="label text-xs">Points</label>
+            <input
+              type="number"
+              min={0}
+              max={10000}
+              step={100}
+              className="input w-32"
+              value={form.points}
+              onChange={(e) => setForm((f) => ({ ...f, points: Number(e.target.value) }))}
+            />
+          </div>
         </div>
         <div className="flex gap-2 pt-2">
           <button onClick={onSave} disabled={saving} className="btn-primary py-2 text-sm">
@@ -376,6 +459,39 @@ function QuestionForm({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SettingToggle({
+  title, desc, checked, onChange,
+}: {
+  title: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">{title}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${
+          checked ? "bg-primary-600" : "bg-slate-300 dark:bg-slate-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Play, ChevronRight, Trophy, Square, QrCode,
-  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff, Eye
+  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff, Eye, Download
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { WS_URL } from "@/lib/api";
@@ -36,6 +36,8 @@ export default function LiveQuizPage() {
   const code = searchParams.get("code") || "";
 
   const [phase, setPhase] = useState<Phase>("waiting");
+  const [attendanceEnabled, setAttendanceEnabled] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [participants, setParticipants] = useState<{ name: string }[]>([]);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
   const [qIndex, setQIndex] = useState(0);
@@ -80,6 +82,11 @@ export default function LiveQuizPage() {
   const wsUrl = code ? `${WS_URL}/ws/teacher/${code}` : null;
   const { connected, send } = useWebSocket(wsUrl, handleMessage);
 
+  // Load whether this quiz takes attendance (controls the CSV button)
+  useEffect(() => {
+    quizApi.get(Number(id)).then((q) => setAttendanceEnabled(!!q.attendance_enabled)).catch(() => {});
+  }, [id]);
+
   // Timer countdown
   useEffect(() => {
     if (phase !== "question" || timeLeft <= 0) return;
@@ -91,6 +98,15 @@ export default function LiveQuizPage() {
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadCsv = async () => {
+    setDownloading(true);
+    try {
+      await quizApi.downloadAttendance(Number(id), code);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const timerPct = currentQ ? (timeLeft / currentQ.time_limit) * 100 : 100;
@@ -300,6 +316,16 @@ export default function LiveQuizPage() {
                     >
                       <Square className="w-4 h-4" />End quiz now
                     </button>
+                    {attendanceEnabled && (
+                      <button
+                        onClick={handleDownloadCsv}
+                        disabled={downloading}
+                        className="btn-secondary w-full"
+                      >
+                        {downloading ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
+                        Attendance CSV
+                      </button>
+                    )}
                   </div>
                   {!revealed && (
                     <p className="mt-3 text-xs text-slate-500">
@@ -382,7 +408,18 @@ export default function LiveQuizPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              {attendanceEnabled && (
+                <button
+                  onClick={handleDownloadCsv}
+                  disabled={downloading}
+                  className="btn-primary w-full mt-6 bg-amber-500 hover:bg-amber-600 shadow-amber-500/30"
+                >
+                  {downloading ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
+                  Download attendance (CSV)
+                </button>
+              )}
+
+              <div className="flex gap-3 mt-3">
                 <button onClick={() => router.push("/teacher/dashboard")} className="btn-secondary flex-1">
                   Back to dashboard
                 </button>

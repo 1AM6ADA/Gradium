@@ -26,7 +26,9 @@ class Participant(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("quiz_sessions.id"), nullable=False)
     name = Column(String, nullable=False)
+    email = Column(String, nullable=True)  # collected when attendance is enabled
     score = Column(Integer, default=0)
+    current_streak = Column(Integer, default=0, nullable=False)  # consecutive correct answers
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("QuizSession", back_populates="participants")

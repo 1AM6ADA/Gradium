@@ -266,8 +266,15 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                     db.add(ans)
 
                     if is_correct:
-                        points = max(100, int(1000 * (1 - time_taken / question.time_limit)))
-                        participant.score += points
+                        participant.current_streak = (participant.current_streak or 0) + 1
+                        participant.score += _compute_points(
+                            quiz=session.quiz,
+                            question=question,
+                            time_taken=time_taken,
+                            streak=participant.current_streak,
+                        )
+                    else:
+                        participant.current_streak = 0
                     db.commit()
 
                     # Acknowledge the lock-in only — correctness stays hidden
@@ -294,6 +301,27 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
     finally:
         manager.disconnect_student(code, participant_id)
         db.close()
+
+
+def _compute_points(quiz, question, time_taken: float, streak: int) -> int:
+    """Score a correct answer using the quiz's scoring configuration.
+
+    base points  -> from the question (teacher-set)
+    speed_bonus  -> faster answers keep more points (down to 50% at the limit)
+    streak_bonus -> +10% per consecutive correct answer, capped at 2x
+    """
+    pts = float(question.points or 1000)
+
+    if getattr(quiz, "speed_bonus", True):
+        limit = question.time_limit or 30
+        ratio = min(max(time_taken / limit, 0.0), 1.0)
+        pts *= (1.0 - 0.5 * ratio)
+
+    if getattr(quiz, "streak_bonus", False) and streak > 1:
+        multiplier = min(1.0 + 0.1 * (streak - 1), 2.0)
+        pts *= multiplier
+
+    return max(0, round(pts))
 
 
 async def _reveal_current_question(db, session: QuizSession, code: str):
