@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Play, ChevronRight, Trophy, Square, QrCode,
-  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff
+  Copy, Check, BarChart3, Clock, AlertCircle, Wifi, WifiOff, Eye, Download
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { WS_URL } from "@/lib/api";
@@ -36,6 +36,8 @@ export default function LiveQuizPage() {
   const code = searchParams.get("code") || "";
 
   const [phase, setPhase] = useState<Phase>("waiting");
+  const [attendanceEnabled, setAttendanceEnabled] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [participants, setParticipants] = useState<{ name: string }[]>([]);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
   const [qIndex, setQIndex] = useState(0);
@@ -46,6 +48,7 @@ export default function LiveQuizPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [revealed, setRevealed] = useState(false);
 
   const handleMessage = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
@@ -61,10 +64,13 @@ export default function LiveQuizPage() {
       setPhase("question");
       setStats(null);
       setAnsweredCount(0);
+      setRevealed(false);
       setTimeLeft(q.time_limit);
     } else if (type === "stats") {
       setStats(data.stats as { options: Record<number, number>; total_answers: number });
       setAnsweredCount(data.answered_count as number ?? 0);
+    } else if (type === "revealed") {
+      setRevealed(true);
     } else if (type === "quiz_ended") {
       setLeaderboard(data.leaderboard as LeaderboardEntry[]);
       setPhase("ended");
@@ -75,6 +81,11 @@ export default function LiveQuizPage() {
 
   const wsUrl = code ? `${WS_URL}/ws/teacher/${code}` : null;
   const { connected, send } = useWebSocket(wsUrl, handleMessage);
+
+  // Load whether this quiz takes attendance (controls the CSV button)
+  useEffect(() => {
+    quizApi.get(Number(id)).then((q) => setAttendanceEnabled(!!q.attendance_enabled)).catch(() => {});
+  }, [id]);
 
   // Timer countdown
   useEffect(() => {
@@ -87,6 +98,15 @@ export default function LiveQuizPage() {
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadCsv = async () => {
+    setDownloading(true);
+    try {
+      await quizApi.downloadAttendance(Number(id), code);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const timerPct = currentQ ? (timeLeft / currentQ.time_limit) * 100 : 100;
@@ -269,6 +289,21 @@ export default function LiveQuizPage() {
                   <h3 className="font-semibold text-slate-300 mb-3 text-sm">Controls</h3>
                   <div className="space-y-2">
                     <button
+                      onClick={() => { send({ type: "reveal" }); setRevealed(true); }}
+                      disabled={revealed}
+                      className={`w-full transition-colors ${
+                        revealed
+                          ? "btn-secondary opacity-70 cursor-default"
+                          : "inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl"
+                      }`}
+                    >
+                      {revealed ? (
+                        <><Check className="w-4 h-4" />Answers revealed</>
+                      ) : (
+                        <><Eye className="w-4 h-4" />Reveal answers</>
+                      )}
+                    </button>
+                    <button
                       onClick={() => send({ type: "next" })}
                       className="btn-primary w-full"
                     >
@@ -281,7 +316,22 @@ export default function LiveQuizPage() {
                     >
                       <Square className="w-4 h-4" />End quiz now
                     </button>
+                    {attendanceEnabled && (
+                      <button
+                        onClick={handleDownloadCsv}
+                        disabled={downloading}
+                        className="btn-secondary w-full"
+                      >
+                        {downloading ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
+                        Attendance CSV
+                      </button>
+                    )}
                   </div>
+                  {!revealed && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Students see only that their answer is locked until you reveal.
+                    </p>
+                  )}
                 </div>
 
                 {stats && (
@@ -358,7 +408,18 @@ export default function LiveQuizPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              {attendanceEnabled && (
+                <button
+                  onClick={handleDownloadCsv}
+                  disabled={downloading}
+                  className="btn-primary w-full mt-6 bg-amber-500 hover:bg-amber-600 shadow-amber-500/30"
+                >
+                  {downloading ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
+                  Download attendance (CSV)
+                </button>
+              )}
+
+              <div className="flex gap-3 mt-3">
                 <button onClick={() => router.push("/teacher/dashboard")} className="btn-secondary flex-1">
                   Back to dashboard
                 </button>

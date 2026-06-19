@@ -40,6 +40,7 @@ class SessionOut(BaseModel):
 
 class JoinSessionRequest(BaseModel):
     name: str
+    email: Optional[str] = None
 
 
 class JoinSessionResponse(BaseModel):

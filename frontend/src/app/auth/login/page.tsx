@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Brain, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { setToken, setUser } from "@/lib/utils";
+import { HeroBackground } from "@/components/ui/motion";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,12 +35,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-primary-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      <HeroBackground />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-md"
+        className="relative z-10 w-full max-w-md"
       >
         {/* Logo */}
         <div className="text-center mb-8">

@@ -50,8 +50,10 @@ export const quizApi = {
   create: (data: { title: string; description: string }) =>
     api.post("/api/quiz/", data).then((r) => r.data),
   get: (id: number) => api.get(`/api/quiz/${id}`).then((r) => r.data),
-  update: (id: number, data: { title?: string; description?: string }) =>
-    api.put(`/api/quiz/${id}`, data).then((r) => r.data),
+  update: (id: number, data: {
+    title?: string; description?: string;
+    attendance_enabled?: boolean; speed_bonus?: boolean; streak_bonus?: boolean;
+  }) => api.put(`/api/quiz/${id}`, data).then((r) => r.data),
   delete: (id: number) => api.delete(`/api/quiz/${id}`).then((r) => r.data),
 
   addQuestion: (quizId: number, data: object) =>
@@ -74,14 +76,31 @@ export const quizApi = {
     api.post(`/api/quiz/${quizId}/session`).then((r) => r.data),
   getSession: (quizId: number) =>
     api.get(`/api/quiz/${quizId}/session`).then((r) => r.data),
+
+  downloadAttendance: async (quizId: number, code?: string) => {
+    const res = await api.get(`/api/quiz/${quizId}/attendance.csv`, {
+      params: code ? { code } : undefined,
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const disp = (res.headers["content-disposition"] as string) || "";
+    const match = disp.match(/filename="?([^"]+)"?/);
+    a.download = match?.[1] || `attendance_${code || quizId}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // Student
 export const studentApi = {
   checkSession: (code: string) =>
     api.get(`/api/student/session/${code}`).then((r) => r.data),
-  joinSession: (code: string, name: string) =>
-    api.post(`/api/student/session/${code}/join`, { name }).then((r) => r.data),
+  joinSession: (code: string, name: string, email?: string) =>
+    api.post(`/api/student/session/${code}/join`, { name, email }).then((r) => r.data),
   summarize: (file: File) => {
     const form = new FormData();
     form.append("file", file);

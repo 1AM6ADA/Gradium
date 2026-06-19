@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
-from typing import List
-import os, aiofiles, random, string, uuid
+from typing import List, Optional
+import os, aiofiles, random, string, uuid, csv, io
 
 from app.database import get_db
 from app.models.user import User
 from app.models.quiz import Quiz, Question
-from app.models.session import QuizSession
+from app.models.session import QuizSession, Participant, Answer
 from app.schemas.quiz import (
     QuizCreate, QuizUpdate, QuizOut, QuizSummary,
     QuestionCreate, QuestionUpdate, QuestionOut,
@@ -62,10 +62,8 @@ def update_quiz(quiz_id: int, data: QuizUpdate, db: Session = Depends(get_db), c
     quiz = db.query(Quiz).filter(Quiz.id == quiz_id, Quiz.teacher_id == current_user.id).first()
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
-    if data.title is not None:
-        quiz.title = data.title
-    if data.description is not None:
-        quiz.description = data.description
+    for field, val in data.model_dump(exclude_unset=True).items():
+        setattr(quiz, field, val)
     db.commit()
     db.refresh(quiz)
     return quiz
@@ -215,6 +213,52 @@ def start_session(quiz_id: int, db: Session = Depends(get_db), current_user: Use
         id=session.id, quiz_id=session.quiz_id, code=session.code,
         status=session.status, current_question_index=session.current_question_index,
         created_at=session.created_at, quiz_title=quiz.title, participant_count=0
+    )
+
+
+@router.get("/{quiz_id}/attendance.csv")
+def download_attendance(
+    quiz_id: int,
+    code: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export the roster of a session as CSV. Defaults to the most recent
+    session for this quiz; pass ?code=XXXX to pick a specific one."""
+    quiz = db.query(Quiz).filter(Quiz.id == quiz_id, Quiz.teacher_id == current_user.id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    query = db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id)
+    if code:
+        query = query.filter(QuizSession.code == code.upper())
+    session = query.order_by(QuizSession.created_at.desc()).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="No session found")
+
+    total_questions = len(quiz.questions)
+    participants = sorted(session.participants, key=lambda p: p.score, reverse=True)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Rank", "Name", "Email", "Score", "Correct", "Total", "Joined At"])
+    for rank, p in enumerate(participants, start=1):
+        correct = sum(1 for a in p.answers if a.is_correct)
+        writer.writerow([
+            rank,
+            p.name,
+            p.email or "",
+            p.score,
+            correct,
+            total_questions,
+            p.joined_at.isoformat() if p.joined_at else "",
+        ])
+
+    filename = f"attendance_{quiz.title[:30].strip().replace(' ', '_')}_{session.code}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

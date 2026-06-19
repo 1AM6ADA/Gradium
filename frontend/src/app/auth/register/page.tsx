@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Brain, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { setToken, setUser } from "@/lib/utils";
+import { HeroBackground } from "@/components/ui/motion";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -46,8 +47,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-primary-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      <HeroBackground />
+      <div className="relative z-10 w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
         {/* Left: perks */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}

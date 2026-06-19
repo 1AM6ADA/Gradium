@@ -23,6 +23,22 @@ const config: Config = {
           900: "#14532d",
           950: "#052e16",
         },
+        // Neutral charcoal scale (overrides Tailwind's blue-tinted "slate").
+        // Dark surfaces follow the recommended #121212 → #1A1A1D → #27272A
+        // elevation hierarchy used by Linear / Vercel / modern dark UIs.
+        slate: {
+          50: "#fafafa",
+          100: "#f4f4f5",
+          200: "#e6e6e7",
+          300: "#d3d3d5",
+          400: "#a1a1a6",
+          500: "#73737a",
+          600: "#52525a",
+          700: "#3f3f45",
+          800: "#27272a",
+          900: "#1a1a1d",
+          950: "#121214",
+        },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

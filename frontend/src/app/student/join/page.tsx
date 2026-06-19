@@ -13,10 +13,13 @@ export default function JoinPage() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [step, setStep] = useState<"code" | "name">("code");
-  const [sessionInfo, setSessionInfo] = useState<{ quiz_title: string; participant_count: number } | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<{ quiz_title: string; participant_count: number; attendance_enabled?: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const attendance = sessionInfo?.attendance_enabled ?? false;
 
   const handleCheckCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +42,14 @@ export default function JoinPage() {
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (attendance && !email.trim()) {
+      setError("Email is required for this quiz");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const result = await studentApi.joinSession(code.trim().toUpperCase(), name.trim());
+      const result = await studentApi.joinSession(code.trim().toUpperCase(), name.trim(), email.trim() || undefined);
       localStorage.setItem("participant_id", String(result.participant_id));
       localStorage.setItem("participant_name", name.trim());
       router.push(`/student/quiz/${code.trim().toUpperCase()}`);
@@ -121,7 +128,11 @@ export default function JoinPage() {
 
               <div className="card p-8">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">What&apos;s your name?</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">This will be shown on the leaderboard</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                  {attendance
+                    ? "Your name and email are recorded for attendance."
+                    : "This will be shown on the leaderboard"}
+                </p>
 
                 {error && (
                   <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl mb-5 text-sm">
@@ -140,7 +151,23 @@ export default function JoinPage() {
                     autoFocus
                     maxLength={40}
                   />
-                  <button type="submit" disabled={loading || !name.trim()} className="btn-primary w-full py-3 text-base">
+                  {attendance && (
+                    <div>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="input text-lg"
+                        placeholder="your.email@school.edu"
+                        required
+                        maxLength={120}
+                      />
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400">
+                        <Users className="w-3 h-3" />Required — this quiz takes attendance
+                      </p>
+                    </div>
+                  )}
+                  <button type="submit" disabled={loading || !name.trim() || (attendance && !email.trim())} className="btn-primary w-full py-3 text-base">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Join Quiz <ArrowRight className="w-5 h-5" /></>}
                   </button>
                 </form>

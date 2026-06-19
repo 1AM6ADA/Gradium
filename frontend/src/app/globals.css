@@ -88,3 +88,119 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-slate-300 rounded-full dark:bg-slate-600;
 }
+
+/* ============================================
+   Modern animation system
+   ============================================ */
+
+@layer utilities {
+  /* Animated gradient text shimmer */
+  .text-gradient {
+    @apply text-transparent bg-clip-text;
+    background-image: linear-gradient(
+      110deg,
+      theme('colors.primary.500'),
+      theme('colors.primary.700'),
+      theme('colors.primary.400'),
+      theme('colors.primary.600')
+    );
+    background-size: 200% auto;
+    animation: shimmer 4s linear infinite;
+  }
+
+  /* Aurora / mesh blob */
+  .blob {
+    @apply absolute rounded-full blur-3xl pointer-events-none;
+    will-change: transform;
+  }
+
+  /* Subtle grid background */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgba(120, 120, 125, 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(120, 120, 125, 0.07) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 60%, transparent 100%);
+  }
+  .dark .bg-grid {
+    background-image:
+      linear-gradient(to right, rgba(150, 150, 156, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(150, 150, 156, 0.06) 1px, transparent 1px);
+  }
+
+  /* Shine sweep on hover */
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-120%) skewX(-20deg);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  }
+  .shine:hover::after {
+    animation: shine-sweep 0.9s ease;
+  }
+
+  /* Infinite marquee track */
+  .animate-marquee {
+    animation: marquee 28s linear infinite;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-blob {
+    animation: blob 18s ease-in-out infinite;
+  }
+
+  .animate-blob-slow {
+    animation: blob 26s ease-in-out infinite;
+  }
+
+  .animate-glow {
+    animation: glow 3s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer {
+  to { background-position: 200% center; }
+}
+
+@keyframes shine-sweep {
+  to { transform: translateX(120%) skewX(-20deg); }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.1); }
+  66% { transform: translate(-30px, 20px) scale(0.95); }
+}
+
+@keyframes glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

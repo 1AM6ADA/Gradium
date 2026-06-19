@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -11,6 +11,12 @@ class Quiz(Base):
     title = Column(String, nullable=False)
     description = Column(Text, default="")
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Attendance: require students to enter an email so the teacher can export
+    # a roster (name, email, score) as CSV afterward.
+    attendance_enabled = Column(Boolean, default=False, nullable=False)
+    # Scoring configuration (teacher-controlled)
+    speed_bonus = Column(Boolean, default=True, nullable=False)    # faster correct = more points
+    streak_bonus = Column(Boolean, default=False, nullable=False)  # consecutive-correct multiplier
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -28,6 +34,7 @@ class Question(Base):
     options = Column(JSON, nullable=False)  # list of 4 strings
     correct_answer = Column(Integer, nullable=False)  # 0-3 index
     time_limit = Column(Integer, default=30)  # seconds
+    points = Column(Integer, default=1000, nullable=False)  # base points for a correct answer
     order = Column(Integer, default=0)
 
     quiz = relationship("Quiz", back_populates="questions")

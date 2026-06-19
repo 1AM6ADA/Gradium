@@ -22,7 +22,7 @@ interface LeaderboardEntry {
   total: number;
 }
 
-type Phase = "waiting" | "question" | "answered" | "ended";
+type Phase = "waiting" | "question" | "submitted" | "revealed" | "ended";
 
 const OPTION_COLORS = [
   { bg: "bg-red-500 hover:bg-red-600 active:bg-red-700", selected: "bg-red-700 ring-4 ring-red-300" },
@@ -77,11 +77,14 @@ export default function StudentQuizPage() {
       setIsCorrect(null);
       setTimeLeft(q.time_limit);
       answerTime.current = Date.now();
-    } else if (type === "answer_result") {
+    } else if (type === "answer_locked") {
+      // Answer recorded — wait for the teacher to reveal results
+      setPhase("submitted");
+    } else if (type === "reveal") {
       setCorrectAnswer(data.correct_answer as number);
       setIsCorrect(data.correct as boolean);
       setScore(data.points as number);
-      setPhase("answered");
+      setPhase("revealed");
     } else if (type === "quiz_ended") {
       setLeaderboard(data.leaderboard as LeaderboardEntry[]);
       setPhase("ended");
@@ -158,7 +161,7 @@ export default function StudentQuizPage() {
             )}
 
             {/* QUESTION */}
-            {(phase === "question" || phase === "answered") && currentQ && (
+            {(phase === "question" || phase === "submitted" || phase === "revealed") && currentQ && (
               <motion.div key={`q-${currentQ.id}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                 {/* Timer */}
                 <div className="flex items-center justify-between mb-4">
@@ -166,7 +169,16 @@ export default function StudentQuizPage() {
                     <Clock className="w-4 h-4" />
                     <span className="font-black text-xl">{timeLeft}</span>
                   </div>
-                  {phase === "answered" && (
+                  {phase === "submitted" && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold bg-slate-700/50 text-slate-300"
+                    >
+                      <Check className="w-4 h-4" />Answer locked
+                    </motion.div>
+                  )}
+                  {phase === "revealed" && (
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
@@ -201,8 +213,9 @@ export default function StudentQuizPage() {
                   {currentQ.options.map((opt, i) => {
                     const color = OPTION_COLORS[i];
                     const isSelected = selectedAnswer === i;
-                    const isRight = phase === "answered" && i === correctAnswer;
-                    const isWrong = phase === "answered" && isSelected && !isCorrect;
+                    const locked = phase === "submitted" || phase === "revealed";
+                    const isRight = phase === "revealed" && i === correctAnswer;
+                    const isWrong = phase === "revealed" && isSelected && !isCorrect;
 
                     return (
                       <motion.button
@@ -214,7 +227,7 @@ export default function StudentQuizPage() {
                           ${isRight ? "bg-primary-500 ring-4 ring-primary-300" :
                             isWrong ? "bg-red-500/50 opacity-70" :
                             isSelected ? color.selected :
-                            phase === "answered" ? "bg-slate-800 opacity-50" :
+                            locked ? "bg-slate-800 opacity-50" :
                             color.bg
                           } disabled:cursor-default`}
                       >
@@ -234,7 +247,18 @@ export default function StudentQuizPage() {
                   })}
                 </div>
 
-                {phase === "answered" && (
+                {phase === "submitted" && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-slate-900 border border-slate-800 px-4 py-3 text-sm text-slate-300"
+                  >
+                    <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                    Answer locked in — waiting for the teacher to reveal results…
+                  </motion.div>
+                )}
+
+                {phase === "revealed" && (
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Sun, Moon, Menu, X, LogOut, LayoutDashboard, BookOpen } from "lucide-react";
 import { getUser, removeToken } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { ScrollProgress } from "@/components/ui/motion";
 
 export default function Navbar() {
   const { theme, setTheme } = useTheme();
@@ -38,7 +39,12 @@ export default function Navbar() {
   if (isAuth) return null;
 
   return (
-    <header
+    <>
+    <ScrollProgress />
+    <motion.header
+      initial={{ y: -80, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
         scrolled
@@ -49,9 +55,14 @@ export default function Navbar() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+          <motion.div
+            whileHover={{ scale: 1.1, rotate: -8 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shadow-md shadow-primary-500/30"
+          >
             <Brain className="w-5 h-5 text-white" />
-          </div>
+          </motion.div>
           <span className="text-lg font-bold text-slate-900 dark:text-white hidden sm:block">
             EduTest <span className="text-primary-600">AI</span>
           </span>
@@ -142,6 +153,7 @@ export default function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
-    </header>
+    </motion.header>
+    </>
   );
 }

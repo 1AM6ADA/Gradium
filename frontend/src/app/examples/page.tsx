@@ -1,10 +1,10 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { Play, BookOpen, Upload, BarChart3, Trophy, Hash, ArrowRight, CheckCircle, ChevronRight } from "lucide-react";
+import { Play, BookOpen, Upload, BarChart3, Trophy, Hash, ArrowRight, CheckCircle } from "lucide-react";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
+import { Reveal, Stagger, StaggerItem, TiltCard, Magnetic, HeroBackground } from "@/components/ui/motion";
 
 const sampleQuestions = [
   {
@@ -27,29 +27,53 @@ const sampleQuestions = [
   },
 ];
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } }),
-};
+const teacherSteps = [
+  {
+    step: "1",
+    icon: Upload,
+    title: "Upload your slides",
+    desc: "Upload PDF, PPTX, or any slide format. The AI reads every slide and extracts key concepts.",
+    color: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+  },
+  {
+    step: "2",
+    icon: BookOpen,
+    title: "Review AI questions",
+    desc: "The AI generates multiple-choice questions. You can edit, delete, or add new ones manually.",
+    color: "bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400",
+  },
+  {
+    step: "3",
+    icon: Play,
+    title: "Run live quiz",
+    desc: "Start a session and share the 6-character code. Students join from any device instantly.",
+    color: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
+  },
+];
 
 export default function ExamplesPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 overflow-x-hidden">
       <Navbar />
       <main className="flex-1 pt-20">
 
         {/* Hero */}
-        <section className="py-16 bg-gradient-to-br from-slate-50 to-primary-50 dark:from-slate-950 dark:to-slate-900">
-          <div className="max-w-4xl mx-auto px-4 text-center">
-            <motion.div initial="hidden" animate="visible" variants={fadeUp}>
+        <section className="relative py-20 overflow-hidden">
+          <HeroBackground />
+          <div className="relative max-w-4xl mx-auto px-4 text-center">
+            <Reveal direction="none">
               <div className="badge-green mx-auto mb-4 inline-flex">Platform Preview</div>
+            </Reveal>
+            <Reveal delay={0.1}>
               <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4">
                 See EduTest AI in action
               </h1>
+            </Reveal>
+            <Reveal delay={0.2}>
               <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
                 Here&apos;s what the experience looks like for teachers and students
               </p>
-            </motion.div>
+            </Reveal>
           </div>
         </section>
 
@@ -57,116 +81,86 @@ export default function ExamplesPage() {
 
           {/* Teacher workflow */}
           <section>
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="mb-10">
+            <Reveal className="mb-10">
               <div className="badge-blue mb-3 inline-flex">For Teachers</div>
               <h2 className="text-3xl font-black text-slate-900 dark:text-white">How teachers prepare quizzes</h2>
-            </motion.div>
+            </Reveal>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                {
-                  step: "1",
-                  icon: Upload,
-                  title: "Upload your slides",
-                  desc: "Upload PDF, PPTX, or any slide format. The AI reads every slide and extracts key concepts.",
-                  color: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-                },
-                {
-                  step: "2",
-                  icon: BookOpen,
-                  title: "Review AI questions",
-                  desc: "The AI generates multiple-choice questions. You can edit, delete, or add new ones manually.",
-                  color: "bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400",
-                },
-                {
-                  step: "3",
-                  icon: Play,
-                  title: "Run live quiz",
-                  desc: "Start a session and share the 6-character code. Students join from any device instantly.",
-                  color: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
-                },
-              ].map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: true }}
-                  variants={fadeUp}
-                  custom={i}
-                  className="card p-6"
-                >
-                  <div className={`w-12 h-12 rounded-2xl ${item.color} flex items-center justify-center mb-4`}>
-                    <item.icon className="w-6 h-6" />
-                  </div>
-                  <div className="badge bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs mb-3">
-                    Step {item.step}
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{item.title}</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{item.desc}</p>
-                </motion.div>
+            <Stagger gap={0.1} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {teacherSteps.map((item, i) => (
+                <StaggerItem key={i}>
+                  <TiltCard intensity={6} className="h-full">
+                    <div className="card shine p-6 h-full group">
+                      <div style={{ transform: "translateZ(30px)" }}>
+                        <div className={`w-12 h-12 rounded-2xl ${item.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                          <item.icon className="w-6 h-6" />
+                        </div>
+                        <div className="badge bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs mb-3">
+                          Step {item.step}
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{item.title}</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{item.desc}</p>
+                      </div>
+                    </div>
+                  </TiltCard>
+                </StaggerItem>
               ))}
-            </div>
+            </Stagger>
           </section>
 
           {/* Example questions */}
           <section>
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="mb-8">
+            <Reveal className="mb-8">
               <div className="badge-green mb-3 inline-flex">Sample Quiz</div>
               <h2 className="text-3xl font-black text-slate-900 dark:text-white">Example questions (AI-generated)</h2>
               <p className="text-slate-500 dark:text-slate-400 mt-2">These are the kind of questions the AI creates from your slides</p>
-            </motion.div>
+            </Reveal>
 
-            <div className="space-y-4">
+            <Stagger gap={0.1} className="space-y-4">
               {sampleQuestions.map((q, i) => (
-                <motion.div
-                  key={i}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: true }}
-                  variants={fadeUp}
-                  custom={i}
-                  className="card p-6"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center text-primary-600 font-bold text-sm flex-shrink-0">
-                      {i + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="badge-blue mb-2">{q.subject}</div>
-                      <p className="font-semibold text-slate-900 dark:text-white mb-3">{q.text}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {q.options.map((opt, j) => (
-                          <div
-                            key={j}
-                            className={`text-sm px-3 py-2 rounded-xl flex items-center gap-2 ${
-                              j === q.correct
-                                ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 font-semibold"
-                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                            }`}
-                          >
-                            {j === q.correct && <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                            <span>{String.fromCharCode(65 + j)}. {opt}</span>
-                          </div>
-                        ))}
+                <StaggerItem key={i}>
+                  <div className="card p-6 hover:-translate-y-1 transition-transform duration-300">
+                    <div className="flex items-start gap-4">
+                      <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center text-primary-600 font-bold text-sm flex-shrink-0">
+                        {i + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="badge-blue mb-2">{q.subject}</div>
+                        <p className="font-semibold text-slate-900 dark:text-white mb-3">{q.text}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {q.options.map((opt, j) => (
+                            <div
+                              key={j}
+                              className={`text-sm px-3 py-2 rounded-xl flex items-center gap-2 ${
+                                j === q.correct
+                                  ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 font-semibold"
+                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              {j === q.correct && <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                              <span>{String.fromCharCode(65 + j)}. {opt}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                </StaggerItem>
               ))}
-            </div>
+            </Stagger>
           </section>
 
           {/* Live quiz experience */}
           <section>
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="mb-8">
+            <Reveal className="mb-8">
               <div className="badge-orange mb-3 inline-flex">For Students</div>
               <h2 className="text-3xl font-black text-slate-900 dark:text-white">The live quiz experience</h2>
-            </motion.div>
+            </Reveal>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Stagger gap={0.12} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Student join mock */}
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={0}>
-                <div className="card p-6">
+              <StaggerItem>
+                <div className="card p-6 h-full">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                     <Hash className="w-4 h-4 text-primary-600" />Joining a quiz
                   </h3>
@@ -184,11 +178,11 @@ export default function ExamplesPage() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </StaggerItem>
 
               {/* Question mock */}
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={1}>
-                <div className="card p-6 bg-slate-950 text-white border-slate-800">
+              <StaggerItem>
+                <div className="card p-6 h-full bg-slate-950 text-white border-slate-800">
                   <h3 className="font-bold text-slate-300 mb-4 flex items-center gap-2">
                     <Play className="w-4 h-4 text-primary-400" />During the quiz
                   </h3>
@@ -213,10 +207,10 @@ export default function ExamplesPage() {
                     ))}
                   </div>
                 </div>
-              </motion.div>
+              </StaggerItem>
 
               {/* Leaderboard mock */}
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={2} className="md:col-span-2">
+              <StaggerItem className="md:col-span-2">
                 <div className="card p-6">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                     <Trophy className="w-4 h-4 text-yellow-500" />Final leaderboard
@@ -238,31 +232,31 @@ export default function ExamplesPage() {
                     ))}
                   </div>
                 </div>
-              </motion.div>
-            </div>
+              </StaggerItem>
+            </Stagger>
           </section>
 
           {/* CTA */}
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={fadeUp}
-            className="card p-10 text-center bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-900/10 border-primary-200 dark:border-primary-800 border-2"
-          >
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-3">Ready to try it?</h2>
-            <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-lg mx-auto">
-              Create a free teacher account and run your first AI-powered quiz in minutes.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/auth/register" className="btn-primary py-3 px-8 text-base">
-                Start for free <ArrowRight className="w-5 h-5" />
-              </Link>
-              <Link href="/student/join" className="btn-secondary py-3 px-8 text-base">
-                <Hash className="w-5 h-5" />Join a quiz
-              </Link>
+          <Reveal>
+            <div className="card p-10 text-center bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-900/10 border-primary-200 dark:border-primary-800 border-2">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-3">Ready to try it?</h2>
+              <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-lg mx-auto">
+                Create a free teacher account and run your first AI-powered quiz in minutes.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Magnetic>
+                  <Link href="/auth/register" className="btn-primary shine py-3 px-8 text-base">
+                    Start for free <ArrowRight className="w-5 h-5" />
+                  </Link>
+                </Magnetic>
+                <Magnetic strength={0.25}>
+                  <Link href="/student/join" className="btn-secondary py-3 px-8 text-base">
+                    <Hash className="w-5 h-5" />Join a quiz
+                  </Link>
+                </Magnetic>
+              </div>
             </div>
-          </motion.div>
+          </Reveal>
         </div>
       </main>
       <Footer />
