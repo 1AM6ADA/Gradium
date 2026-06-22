@@ -2,7 +2,14 @@
 
 Gradium is a web platform for teachers and students.
 
-The platform is intended to help teachers generate and edit tests from uploaded lecture materials, send tests to students, and partially check written answers. Students can pass assigned tests and receive lecture summaries.
+Teachers turn uploaded lecture slides into quizzes with AI, then run them **live** for the class — students join from any device with a code, answer in real time, and see a leaderboard. Students can also summarize PDFs/slides into study notes.
+
+## Versions
+
+- **MVP 0** — AI quiz generation, quiz editing, live single-answer/timed quizzes, code-based join, scoring + leaderboard, PDF summarizer, free/premium gating.
+- **MVP 1 (current)** — adds **attendance & CSV export**, **teacher-controlled answer reveal**, **configurable scoring** (per-question points, speed & streak bonuses), **multiple-answer** and **no-time-limit** questions, and the **Captain's Blue** visual identity.
+
+See **[`docs/MVP1.md`](docs/MVP1.md)** for the full MVP 1 feature list and the new/changed API endpoints.
 
 ## Repository structure
 
