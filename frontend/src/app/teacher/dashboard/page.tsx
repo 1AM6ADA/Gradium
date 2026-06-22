@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const isPremium = user?.is_premium ?? false;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-[#f5f8fa] dark:bg-[#151f2e]">
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
@@ -99,10 +99,10 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
           <motion.div initial="hidden" animate="visible" variants={fadeUp}>
-            <p className="text-sm text-primary-600 dark:text-primary-400 font-semibold mb-1">
-              Welcome back,
+            <p className="text-sm text-primary-600 dark:text-primary-400 font-medium mb-1 uppercase tracking-wider">
+              Welcome back
             </p>
-            <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <h1 className="font-display font-light text-4xl text-primary-950 dark:text-white flex items-center gap-3">
               {user?.name ?? "Teacher"}
               {isPremium && (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2.5 py-1 rounded-full">

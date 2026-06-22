@@ -124,10 +124,11 @@ async def teacher_ws(code: str, ws: WebSocket):
                             "text": q.text,
                             "options": q.options,
                             "time_limit": q.time_limit,
+                            "multiple": q.multiple,
                         },
                     }
                     await manager.broadcast_to_students(code, payload)
-                    await ws.send_json({**payload, "correct_answer": q.correct_answer})
+                    await ws.send_json({**payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "next":
                     if session.status != "active":
@@ -158,10 +159,11 @@ async def teacher_ws(code: str, ws: WebSocket):
                                 "text": q.text,
                                 "options": q.options,
                                 "time_limit": q.time_limit,
+                                "multiple": q.multiple,
                             },
                         }
                         await manager.broadcast_to_students(code, payload)
-                        await ws.send_json({**payload, "correct_answer": q.correct_answer})
+                        await ws.send_json({**payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "end":
                     session.status = "finished"
@@ -242,6 +244,7 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
 
                     q_id = data.get("question_id")
                     answer_idx = data.get("answer")
+                    selected = data.get("selected")  # list[int] for multiple-answer
                     time_taken = data.get("time_taken", 0)
 
                     question = db.query(Question).filter(Question.id == q_id).first()
@@ -255,14 +258,27 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                     if existing:
                         continue
 
-                    is_correct = answer_idx == question.correct_answer
-                    ans = Answer(
-                        participant_id=participant_id,
-                        question_id=q_id,
-                        answer=answer_idx,
-                        is_correct=is_correct,
-                        time_taken=time_taken,
-                    )
+                    if question.multiple:
+                        chosen = set(selected or [])
+                        correct_set = set(question.correct_answers or [])
+                        is_correct = chosen == correct_set and len(chosen) > 0
+                        ans = Answer(
+                            participant_id=participant_id,
+                            question_id=q_id,
+                            answer=-1,
+                            selected=sorted(chosen),
+                            is_correct=is_correct,
+                            time_taken=time_taken,
+                        )
+                    else:
+                        is_correct = answer_idx == question.correct_answer
+                        ans = Answer(
+                            participant_id=participant_id,
+                            question_id=q_id,
+                            answer=answer_idx if answer_idx is not None else -1,
+                            is_correct=is_correct,
+                            time_taken=time_taken,
+                        )
                     db.add(ans)
 
                     if is_correct:
@@ -312,8 +328,9 @@ def _compute_points(quiz, question, time_taken: float, streak: int) -> int:
     """
     pts = float(question.points or 1000)
 
-    if getattr(quiz, "speed_bonus", True):
-        limit = question.time_limit or 30
+    # Speed bonus only applies to timed questions
+    if getattr(quiz, "speed_bonus", True) and (question.time_limit or 0) > 0:
+        limit = question.time_limit
         ratio = min(max(time_taken / limit, 0.0), 1.0)
         pts *= (1.0 - 0.5 * ratio)
 
@@ -343,7 +360,10 @@ async def _reveal_current_question(db, session: QuizSession, code: str):
             "type": "reveal",
             "question_id": q.id,
             "correct_answer": q.correct_answer,
+            "correct_answers": q.correct_answers if q.multiple else [q.correct_answer],
+            "multiple": q.multiple,
             "your_answer": answer.answer if answer else None,
+            "your_selected": answer.selected if answer else None,
             "correct": bool(answer.is_correct) if answer else False,
             "answered": answer is not None,
             "points": participant.score if participant else 0,
@@ -376,6 +396,8 @@ def _get_answer_stats(db, question_id: int, session_id: int) -> dict:
     )
     counts = {0: 0, 1: 0, 2: 0, 3: 0}
     for a in answers:
-        if a.answer in counts:
-            counts[a.answer] += 1
+        picks = a.selected if a.selected else ([a.answer] if a.answer is not None else [])
+        for p in picks:
+            if p in counts:
+                counts[p] += 1
     return {"options": counts, "total_answers": len(answers)}
