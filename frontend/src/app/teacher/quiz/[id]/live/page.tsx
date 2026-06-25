@@ -17,6 +17,7 @@ interface Question {
   text: string;
   options: string[];
   time_limit: number;
+  multiple?: boolean;
 }
 
 interface LeaderboardEntry {
@@ -43,6 +44,7 @@ export default function LiveQuizPage() {
   const [qIndex, setQIndex] = useState(0);
   const [qTotal, setQTotal] = useState(0);
   const [correctAnswer, setCorrectAnswer] = useState<number | null>(null);
+  const [correctAnswers, setCorrectAnswers] = useState<number[]>([]);
   const [stats, setStats] = useState<{ options: Record<number, number>; total_answers: number } | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -61,6 +63,7 @@ export default function LiveQuizPage() {
       setQIndex(data.index as number);
       setQTotal(data.total as number);
       setCorrectAnswer(data.correct_answer as number);
+      setCorrectAnswers((data.correct_answers as number[]) ?? [data.correct_answer as number]);
       setPhase("question");
       setStats(null);
       setAnsweredCount(0);
@@ -226,19 +229,28 @@ export default function LiveQuizPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2 text-slate-400 text-sm">
                     <Clock className="w-4 h-4" />
-                    <span className={`text-2xl font-black ${timeLeft <= 5 ? "text-red-400" : "text-white"}`}>
-                      {timeLeft}s
-                    </span>
+                    {currentQ.time_limit === 0 ? (
+                      <span className="text-lg font-semibold text-slate-300">No time limit</span>
+                    ) : (
+                      <span className={`text-2xl font-black ${timeLeft <= 5 ? "text-red-400" : "text-white"}`}>
+                        {timeLeft}s
+                      </span>
+                    )}
+                    {currentQ.multiple && (
+                      <span className="ml-2 text-xs bg-primary-500/20 text-primary-300 px-2 py-0.5 rounded-full">Multiple</span>
+                    )}
                   </div>
                   <div className="text-slate-400 text-sm">{answeredCount}/{participants.length} answered</div>
                 </div>
-                <div className="h-2 bg-slate-800 rounded-full mb-6 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-primary-500 rounded-full"
-                    style={{ width: `${timerPct}%` }}
-                    transition={{ duration: 1, ease: "linear" }}
-                  />
-                </div>
+                {currentQ.time_limit > 0 && (
+                  <div className="h-2 bg-slate-800 rounded-full mb-6 overflow-hidden">
+                    <motion.div
+                      className="h-full bg-primary-500 rounded-full"
+                      style={{ width: `${timerPct}%` }}
+                      transition={{ duration: 1, ease: "linear" }}
+                    />
+                  </div>
+                )}
 
                 {/* Question */}
                 <div className="bg-slate-900 rounded-2xl p-8 mb-6">
@@ -252,7 +264,7 @@ export default function LiveQuizPage() {
                     const count = stats?.options[i] ?? 0;
                     const total = stats?.total_answers ?? 0;
                     const pct = total > 0 ? (count / total) * 100 : 0;
-                    const isCorrect = i === correctAnswer;
+                    const isCorrect = correctAnswers.includes(i);
                     return (
                       <div
                         key={i}
@@ -349,7 +361,7 @@ export default function LiveQuizPage() {
                             <span className="w-6 font-bold text-slate-400">{String.fromCharCode(65 + i)}</span>
                             <div className="flex-1 bg-slate-800 rounded-full h-2">
                               <div
-                                className={`h-2 rounded-full transition-all ${i === correctAnswer ? "bg-primary-500" : "bg-slate-600"}`}
+                                className={`h-2 rounded-full transition-all ${correctAnswers.includes(i) ? "bg-primary-500" : "bg-slate-600"}`}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>

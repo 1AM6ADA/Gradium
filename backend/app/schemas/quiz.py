@@ -6,8 +6,10 @@ from typing import List, Optional
 class QuestionCreate(BaseModel):
     text: str
     options: List[str]
-    correct_answer: int
-    time_limit: int = 30
+    correct_answer: int = 0
+    multiple: bool = False
+    correct_answers: Optional[List[int]] = None
+    time_limit: int = 30  # 0 = no time limit
     points: int = 1000
     order: int = 0
 
@@ -16,6 +18,8 @@ class QuestionUpdate(BaseModel):
     text: Optional[str] = None
     options: Optional[List[str]] = None
     correct_answer: Optional[int] = None
+    multiple: Optional[bool] = None
+    correct_answers: Optional[List[int]] = None
     time_limit: Optional[int] = None
     points: Optional[int] = None
     order: Optional[int] = None
@@ -26,6 +30,8 @@ class QuestionOut(BaseModel):
     text: str
     options: List[str]
     correct_answer: int
+    multiple: bool = False
+    correct_answers: Optional[List[int]] = None
     time_limit: int
     points: int
     order: int

@@ -22,10 +22,15 @@ _ADDED_COLUMNS = {
     ],
     "questions": [
         ("points", "INTEGER NOT NULL DEFAULT 1000"),
+        ("multiple", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("correct_answers", "JSON"),
     ],
     "participants": [
         ("email", "VARCHAR"),
         ("current_streak", "INTEGER NOT NULL DEFAULT 0"),
+    ],
+    "answers": [
+        ("selected", "JSON"),
     ],
 }
 
