@@ -4,9 +4,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-import requests
-from markitdown import MarkItDown
-
 from app.config import settings
 
 
@@ -14,10 +11,27 @@ class AIServiceError(RuntimeError):
     pass
 
 
+def _get_gemini_client():
+    from google import genai
+
+    if not settings.GEMINI_API_KEY:
+        raise AIServiceError("GEMINI_API_KEY is not configured.")
+
+    return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
 async def generate_questions_from_presentation_pdf(
     pdf_path: str,
     num_questions: int = 10,
 ) -> List[Dict[str, Any]]:
+    """Generate quiz questions from a visual PDF presentation/document.
+
+    The route must pass a PDF here:
+    - uploaded .pdf files are passed directly;
+    - uploaded .pptx/.ppt files are converted to .pdf before calling this function.
+
+    This service intentionally does not support text-based question generation.
+    """
     return await asyncio.to_thread(
         _generate_questions_from_presentation_pdf_sync,
         pdf_path,
@@ -29,83 +43,79 @@ def _generate_questions_from_presentation_pdf_sync(
     pdf_path: str,
     num_questions: int,
 ) -> List[Dict[str, Any]]:
-    path = Path(pdf_path)
+    from google.genai import types
 
+    path = Path(pdf_path)
     if not path.exists():
         raise AIServiceError(f"PDF file not found: {pdf_path}")
-
     if path.suffix.lower() != ".pdf":
-        raise AIServiceError("Question generation expects a PDF file.")
+        raise AIServiceError("Gemini question generation expects a PDF file.")
 
-    markdown_text = _extract_markdown_from_pdf(str(path))
+    client = _get_gemini_client()
+    pdf_bytes = path.read_bytes()
 
-    if not markdown_text.strip():
-        raise AIServiceError("MarkItDown returned empty text from the PDF.")
-
-    prompt = _build_local_llm_quiz_prompt(
-        markdown_text=markdown_text,
-        num_questions=num_questions,
+    response = _generate_content(
+        client=client,
+        model=settings.GEMINI_MODEL,
+        contents=[
+            types.Part.from_bytes(
+                data=pdf_bytes,
+                mime_type="application/pdf",
+            ),
+            _build_presentation_quiz_prompt(num_questions),
+        ],
     )
 
-    raw = _call_ollama(prompt)
+    raw = getattr(response, "text", "") or ""
     questions = _parse_questions_json(raw)
     validated = _validate_questions(questions)
 
     if len(validated) < num_questions:
         raise AIServiceError(
-            f"Local LLM returned only {len(validated)} valid questions out of {num_questions}."
+            f"Gemini returned only {len(validated)} valid questions out of {num_questions}."
         )
 
     return validated[:num_questions]
 
 
-def _extract_markdown_from_pdf(pdf_path: str) -> str:
+def _generate_content(client: Any, model: str, contents: List[Any]) -> Any:
+    """Call Gemini with JSON mode, with a minimal fallback for SDK config differences."""
     try:
-        converter = MarkItDown()
-        result = converter.convert(pdf_path)
-        return result.text_content or ""
-    except Exception as exc:
-        raise AIServiceError(f"MarkItDown failed to process PDF: {exc}") from exc
+        from google.genai import types
 
-
-def _call_ollama(prompt: str) -> str:
-    ollama_url = getattr(settings, "OLLAMA_URL", "http://ollama:11434")
-    model = getattr(settings, "LOCAL_LLM_MODEL", "qwen2.5:3b")
-
-    try:
-        response = requests.post(
-            f"{ollama_url}/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0.2,
-                    "num_ctx": 8192,
-                },
-            },
-            timeout=300,
+        config = types.GenerateContentConfig(
+            temperature=0.35,
+            max_output_tokens=8192,
+            response_mime_type="application/json",
         )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise AIServiceError(f"Ollama request failed: {exc}") from exc
+        return client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+    except TypeError:
+        return client.models.generate_content(
+            model=model,
+            contents=contents,
+            config={
+                "temperature": 0.35,
+                "max_output_tokens": 8192,
+                "response_mime_type": "application/json",
+            },
+        )
 
-    data = response.json()
-    return data.get("response", "")
 
-
-def _build_local_llm_quiz_prompt(markdown_text: str, num_questions: int) -> str:
+def _build_presentation_quiz_prompt(num_questions: int) -> str:
     return f"""
 You are an expert teacher and quiz creator.
+Analyze the uploaded presentation visually and semantically. Use the actual slide content: text, formulas, diagrams, charts, tables, visual grouping, and slide context.
 
-You will receive lecture content extracted from a PDF presentation as Markdown.
-Generate exactly {num_questions} multiple-choice questions based only on this content.
+Generate exactly {num_questions} multiple-choice questions.
 
 Rules:
-- Generate questions in the same language as the lecture content.
-- Each question must be grounded in the provided content.
-- Do not use outside facts.
+- Generate questions in the same language as the presentation.
+- Each question must be grounded in the uploaded presentation.
+- Do not use outside facts unless the presentation itself requires basic background knowledge.
 - Prefer questions that test understanding, not only memorization.
 - Each question must have exactly 4 answer options.
 - Exactly one option must be correct.
@@ -125,11 +135,6 @@ Required JSON shape:
     "time_limit": 30
   }}
 ]
-
-Lecture content:
-\"\"\"
-{markdown_text[:24000]}
-\"\"\"
 """.strip()
 
 
@@ -143,7 +148,7 @@ def _parse_questions_json(raw: str) -> List[Dict[str, Any]]:
     except json.JSONDecodeError as exc:
         match = re.search(r"\[.*\]", cleaned, re.DOTALL)
         if not match:
-            raise AIServiceError("Local LLM did not return valid JSON.") from exc
+            raise AIServiceError("Gemini did not return valid JSON.") from exc
         parsed = json.loads(match.group(0))
 
     if isinstance(parsed, dict) and isinstance(parsed.get("questions"), list):
@@ -151,7 +156,7 @@ def _parse_questions_json(raw: str) -> List[Dict[str, Any]]:
     if isinstance(parsed, list):
         return parsed
 
-    raise AIServiceError("Local LLM returned JSON, but not a question array.")
+    raise AIServiceError("Gemini returned JSON, but not a question array.")
 
 
 def _validate_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

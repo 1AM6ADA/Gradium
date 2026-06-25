@@ -34,14 +34,5 @@ services:
       backend:
         condition: service_healthy
 
-  ollama:
-    image: ollama/ollama
-    container_name: gradium-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama 
-
 volumes:
   backend_data:
-  ollama_data:
