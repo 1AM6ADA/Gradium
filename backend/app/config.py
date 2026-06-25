@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    AI_PROVIDER: str = "ollama"
+    OLLAMA_URL: str = "http://ollama:11434"
+    LOCAL_LLM_MODEL: str = "qwen2.5:3b"
+    FILE_PREPROCESSOR: str = "markitdown"
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
