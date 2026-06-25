@@ -12,26 +12,26 @@ jobs:
 
     steps:
       - name: Checkout latest code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Show Docker version
         run: |
-          docker --version
-          docker compose version
+          sudo docker --version
+          sudo docker compose version
 
       - name: Validate docker compose
-        run: docker compose config
+        run: sudo docker compose config
 
       - name: Stop old containers
-        run: docker compose down || true
+        run: sudo docker compose down || true
 
       - name: Build and start containers
-        run: docker compose up -d --build
+        run: sudo docker compose up -d --build
 
       - name: Show running containers
-        run: docker ps
+        run: sudo docker ps
 
       - name: Show logs
         run: |
-          docker compose logs backend --tail=30
-          docker compose logs frontend --tail=30
+          sudo docker compose logs backend --tail=30
+          sudo docker compose logs frontend --tail=30
