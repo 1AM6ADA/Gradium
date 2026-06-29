@@ -2,42 +2,18 @@
 Thumbs.db
 .directory
 
-frontend/node_modules/
-frontend/build/
-frontend/dist/
-frontend/.env
-frontend/.env.local
-frontend/.eslintcache
-
-# Environment / secrets
+# Next.js frontend (root of this project)
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+npm-debug.log*
 .env
 .env.local
 *.env.local
-
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-backend/.Python
-backend/env/
-backend/venv/
-backend/.env
-backend/.pytest_cache/
-
-# Uploaded files (runtime artifacts)
-backend/uploads/
-
-backend/edutest.db
-*.db
-*.sqlite3
 
 .vscode/
 .idea/
 *.suo
 *.sln
-
-.next/
-out/
-
-build/
-

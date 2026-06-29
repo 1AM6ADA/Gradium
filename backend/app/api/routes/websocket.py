@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
-import json, asyncio
+import json, asyncio, random
 
 from app.database import get_db, SessionLocal
 from app.models.session import QuizSession, Participant, Answer
@@ -77,6 +77,56 @@ def get_session_db():
         db.close()
 
 
+def _seeded_permutation(participant_id: int, question_id: int, n: int) -> list[int]:
+    """Deterministic per-(participant, question) shuffle of option indices.
+
+    Anti-cheat: each student sees the same options in a different order, so
+    "the answer is C" can't be shouted across the room. Re-derived from the
+    seed every time (on question send, answer submit, and reveal) instead of
+    being stored, so no extra DB/connection state is needed.
+    perm[shuffled_position] = canonical_index.
+    """
+    indices = list(range(n))
+    random.Random(f"{participant_id}:{question_id}").shuffle(indices)
+    return indices
+
+
+def _invert_permutation(perm: list[int]) -> list[int]:
+    """inv[canonical_index] = shuffled_position — the reverse mapping."""
+    inv = [0] * len(perm)
+    for shuffled_pos, canonical_idx in enumerate(perm):
+        inv[canonical_idx] = shuffled_pos
+    return inv
+
+
+def _map_idx(mapping: list[int], idx):
+    if not isinstance(idx, int) or idx < 0 or idx >= len(mapping):
+        return idx
+    return mapping[idx]
+
+
+def _build_student_question_payload(q: Question, participant_id: int, index: int, total: int) -> dict:
+    options = q.options or []
+    perm = _seeded_permutation(participant_id, q.id, len(options))
+    return {
+        "type": "question",
+        "index": index,
+        "total": total,
+        "question": {
+            "id": q.id,
+            "text": q.text,
+            "options": [options[i] for i in perm],
+            "time_limit": q.time_limit,
+            "multiple": q.multiple,
+        },
+    }
+
+
+async def _send_question_to_students(code: str, q: Question, index: int, total: int):
+    for pid in list(manager.students.get(code, {}).keys()):
+        await manager.send_to_student(code, pid, _build_student_question_payload(q, pid, index, total))
+
+
 @router.websocket("/teacher/{code}")
 async def teacher_ws(code: str, ws: WebSocket):
     await manager.connect_teacher(code, ws)
@@ -115,7 +165,8 @@ async def teacher_ws(code: str, ws: WebSocket):
                     questions = sorted(quiz.questions, key=lambda q: q.order)
                     q = questions[0]
 
-                    payload = {
+                    await _send_question_to_students(code, q, 0, len(questions))
+                    teacher_payload = {
                         "type": "question",
                         "index": 0,
                         "total": len(questions),
@@ -124,10 +175,10 @@ async def teacher_ws(code: str, ws: WebSocket):
                             "text": q.text,
                             "options": q.options,
                             "time_limit": q.time_limit,
+                            "multiple": q.multiple,
                         },
                     }
-                    await manager.broadcast_to_students(code, payload)
-                    await ws.send_json({**payload, "correct_answer": q.correct_answer})
+                    await ws.send_json({**teacher_payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "next":
                     if session.status != "active":
@@ -149,7 +200,8 @@ async def teacher_ws(code: str, ws: WebSocket):
                         session.current_question_index = next_idx
                         db.commit()
                         q = questions[next_idx]
-                        payload = {
+                        await _send_question_to_students(code, q, next_idx, len(questions))
+                        teacher_payload = {
                             "type": "question",
                             "index": next_idx,
                             "total": len(questions),
@@ -158,10 +210,10 @@ async def teacher_ws(code: str, ws: WebSocket):
                                 "text": q.text,
                                 "options": q.options,
                                 "time_limit": q.time_limit,
+                                "multiple": q.multiple,
                             },
                         }
-                        await manager.broadcast_to_students(code, payload)
-                        await ws.send_json({**payload, "correct_answer": q.correct_answer})
+                        await ws.send_json({**teacher_payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "end":
                     session.status = "finished"
@@ -241,12 +293,20 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                         continue
 
                     q_id = data.get("question_id")
-                    answer_idx = data.get("answer")
+                    raw_answer_idx = data.get("answer")
+                    raw_selected = data.get("selected")  # list[int] for multiple-answer
                     time_taken = data.get("time_taken", 0)
 
                     question = db.query(Question).filter(Question.id == q_id).first()
                     if not question:
                         continue
+
+                    # The student answered against their own shuffled option
+                    # order (see _seeded_permutation) — translate back to the
+                    # canonical indices before storing/scoring.
+                    perm = _seeded_permutation(participant_id, q_id, len(question.options or []))
+                    answer_idx = _map_idx(perm, raw_answer_idx)
+                    selected = [_map_idx(perm, i) for i in raw_selected] if raw_selected else raw_selected
 
                     existing = db.query(Answer).filter(
                         Answer.participant_id == participant_id,
@@ -255,14 +315,27 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                     if existing:
                         continue
 
-                    is_correct = answer_idx == question.correct_answer
-                    ans = Answer(
-                        participant_id=participant_id,
-                        question_id=q_id,
-                        answer=answer_idx,
-                        is_correct=is_correct,
-                        time_taken=time_taken,
-                    )
+                    if question.multiple:
+                        chosen = set(selected or [])
+                        correct_set = set(question.correct_answers or [])
+                        is_correct = chosen == correct_set and len(chosen) > 0
+                        ans = Answer(
+                            participant_id=participant_id,
+                            question_id=q_id,
+                            answer=-1,
+                            selected=sorted(chosen),
+                            is_correct=is_correct,
+                            time_taken=time_taken,
+                        )
+                    else:
+                        is_correct = answer_idx == question.correct_answer
+                        ans = Answer(
+                            participant_id=participant_id,
+                            question_id=q_id,
+                            answer=answer_idx if answer_idx is not None else -1,
+                            is_correct=is_correct,
+                            time_taken=time_taken,
+                        )
                     db.add(ans)
 
                     if is_correct:
@@ -312,8 +385,9 @@ def _compute_points(quiz, question, time_taken: float, streak: int) -> int:
     """
     pts = float(question.points or 1000)
 
-    if getattr(quiz, "speed_bonus", True):
-        limit = question.time_limit or 30
+    # Speed bonus only applies to timed questions
+    if getattr(quiz, "speed_bonus", True) and (question.time_limit or 0) > 0:
+        limit = question.time_limit
         ratio = min(max(time_taken / limit, 0.0), 1.0)
         pts *= (1.0 - 0.5 * ratio)
 
@@ -339,11 +413,22 @@ async def _reveal_current_question(db, session: QuizSession, code: str):
             Answer.participant_id == pid,
             Answer.question_id == q.id,
         ).first()
+
+        # Stored answers/correct indices are canonical — re-derive this
+        # student's permutation to express everything back in the shuffled
+        # order they were actually shown (see _seeded_permutation).
+        perm = _seeded_permutation(pid, q.id, len(q.options or []))
+        inv = _invert_permutation(perm)
+        canonical_correct_answers = q.correct_answers if q.multiple else [q.correct_answer]
+
         await manager.send_to_student(code, pid, {
             "type": "reveal",
             "question_id": q.id,
-            "correct_answer": q.correct_answer,
-            "your_answer": answer.answer if answer else None,
+            "correct_answer": _map_idx(inv, q.correct_answer),
+            "correct_answers": [_map_idx(inv, c) for c in (canonical_correct_answers or [])],
+            "multiple": q.multiple,
+            "your_answer": _map_idx(inv, answer.answer) if answer else None,
+            "your_selected": [_map_idx(inv, s) for s in (answer.selected or [])] if answer and answer.selected else (answer.selected if answer else None),
             "correct": bool(answer.is_correct) if answer else False,
             "answered": answer is not None,
             "points": participant.score if participant else 0,
@@ -376,6 +461,8 @@ def _get_answer_stats(db, question_id: int, session_id: int) -> dict:
     )
     counts = {0: 0, 1: 0, 2: 0, 3: 0}
     for a in answers:
-        if a.answer in counts:
-            counts[a.answer] += 1
+        picks = a.selected if a.selected else ([a.answer] if a.answer is not None else [])
+        for p in picks:
+            if p in counts:
+                counts[p] += 1
     return {"options": counts, "total_answers": len(answers)}

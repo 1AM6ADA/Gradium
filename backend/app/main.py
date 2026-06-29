@@ -6,7 +6,7 @@ import os
 
 from app.database import engine, Base
 from app.config import settings
-from app.api.routes import auth, quiz, student, websocket
+from app.api.routes import auth, quiz, student, websocket, teacher, test as test_routes
 
 import app.models  # noqa: F401 — ensure all models are registered before create_all
 
@@ -19,13 +19,28 @@ _ADDED_COLUMNS = {
         ("attendance_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
         ("speed_bonus", "BOOLEAN NOT NULL DEFAULT 1"),
         ("streak_bonus", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("mode", "VARCHAR NOT NULL DEFAULT 'quiz'"),
+        ("opens_at", "DATETIME"),
+        ("closes_at", "DATETIME"),
+        ("share_token", "VARCHAR"),
+        ("source_pdf_path", "VARCHAR"),
+        ("source_filename", "VARCHAR"),
     ],
     "questions": [
         ("points", "INTEGER NOT NULL DEFAULT 1000"),
+        ("multiple", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("correct_answers", "JSON"),
+        ("qtype", "VARCHAR NOT NULL DEFAULT 'multiple_choice'"),
+        ("grading_mode", "VARCHAR NOT NULL DEFAULT 'auto'"),
+        ("expected_answer", "TEXT"),
+        ("source_label", "VARCHAR"),
     ],
     "participants": [
         ("email", "VARCHAR"),
         ("current_streak", "INTEGER NOT NULL DEFAULT 0"),
+    ],
+    "answers": [
+        ("selected", "JSON"),
     ],
 }
 
@@ -69,6 +84,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(quiz.router, prefix="/api/quiz", tags=["quiz"])
 app.include_router(student.router, prefix="/api/student", tags=["student"])
+app.include_router(teacher.router, prefix="/api/teacher", tags=["teacher"])
+app.include_router(test_routes.router, prefix="/api/test", tags=["test"])
 app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
 
