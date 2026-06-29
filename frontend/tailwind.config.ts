@@ -10,18 +10,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Pantone 18-4020 TCX "Captain's Blue" — dusty steel blue
         primary: {
-          50: "#f0fdf4",
-          100: "#dcfce7",
-          200: "#bbf7d0",
-          300: "#86efac",
-          400: "#4ade80",
-          500: "#22c55e",
-          600: "#16a34a",
-          700: "#15803d",
-          800: "#166534",
-          900: "#14532d",
-          950: "#052e16",
+          50: "#f2f6f8",
+          100: "#e3ebf1",
+          200: "#c2d0d9",
+          300: "#b3c5d5",
+          400: "#87a0b8",
+          500: "#5d7993",
+          600: "#415b78",
+          700: "#364b62",
+          800: "#2c3c4f",
+          900: "#223045",
+          950: "#151f2e",
         },
         // Neutral charcoal scale (overrides Tailwind's blue-tinted "slate").
         // Dark surfaces follow the recommended #121212 → #1A1A1D → #27272A

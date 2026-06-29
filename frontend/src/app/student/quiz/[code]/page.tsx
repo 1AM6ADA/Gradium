@@ -12,6 +12,7 @@ interface Question {
   text: string;
   options: string[];
   time_limit: number;
+  multiple?: boolean;
 }
 
 interface LeaderboardEntry {
@@ -39,7 +40,10 @@ export default function StudentQuizPage() {
   const [qIndex, setQIndex] = useState(0);
   const [qTotal, setQTotal] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedSet, setSelectedSet] = useState<number[]>([]);  // multi-answer picks
+  const [submitted, setSubmitted] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState<number | null>(null);
+  const [correctAnswers, setCorrectAnswers] = useState<number[]>([]);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -73,7 +77,10 @@ export default function StudentQuizPage() {
       setQTotal(data.total as number);
       setPhase("question");
       setSelectedAnswer(null);
+      setSelectedSet([]);
+      setSubmitted(false);
       setCorrectAnswer(null);
+      setCorrectAnswers([]);
       setIsCorrect(null);
       setTimeLeft(q.time_limit);
       answerTime.current = Date.now();
@@ -82,6 +89,7 @@ export default function StudentQuizPage() {
       setPhase("submitted");
     } else if (type === "reveal") {
       setCorrectAnswer(data.correct_answer as number);
+      setCorrectAnswers((data.correct_answers as number[]) ?? [data.correct_answer as number]);
       setIsCorrect(data.correct as boolean);
       setScore(data.points as number);
       setPhase("revealed");
@@ -105,10 +113,23 @@ export default function StudentQuizPage() {
   }, [phase, timeLeft]);
 
   const handleAnswer = (idx: number) => {
-    if (selectedAnswer !== null || !currentQ) return;
+    if (submitted || !currentQ) return;
+    if (currentQ.multiple) {
+      // toggle selection; submit happens via the button
+      setSelectedSet((prev) => prev.includes(idx) ? prev.filter((x) => x !== idx) : [...prev, idx]);
+      return;
+    }
     setSelectedAnswer(idx);
+    setSubmitted(true);
     const elapsed = (Date.now() - answerTime.current) / 1000;
     send({ type: "answer", question_id: currentQ.id, answer: idx, time_taken: elapsed });
+  };
+
+  const handleSubmitMultiple = () => {
+    if (submitted || !currentQ || selectedSet.length === 0) return;
+    setSubmitted(true);
+    const elapsed = (Date.now() - answerTime.current) / 1000;
+    send({ type: "answer", question_id: currentQ.id, selected: selectedSet, time_taken: elapsed });
   };
 
   const myResult = leaderboard.find((e) => e.name === myName);
@@ -165,10 +186,17 @@ export default function StudentQuizPage() {
               <motion.div key={`q-${currentQ.id}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                 {/* Timer */}
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`flex items-center gap-1.5 text-sm ${timeLeft <= 5 ? "text-red-400" : "text-slate-300"}`}>
-                    <Clock className="w-4 h-4" />
-                    <span className="font-black text-xl">{timeLeft}</span>
-                  </div>
+                  {currentQ.time_limit === 0 ? (
+                    <div className="flex items-center gap-1.5 text-sm text-slate-400">
+                      <Clock className="w-4 h-4" />
+                      <span className="font-semibold">No time limit</span>
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-1.5 text-sm ${timeLeft <= 5 ? "text-red-400" : "text-slate-300"}`}>
+                      <Clock className="w-4 h-4" />
+                      <span className="font-black text-xl">{timeLeft}</span>
+                    </div>
+                  )}
                   {phase === "submitted" && (
                     <motion.div
                       initial={{ scale: 0 }}
@@ -194,14 +222,16 @@ export default function StudentQuizPage() {
                   )}
                 </div>
 
-                {/* Timer bar */}
-                <div className="h-1.5 bg-slate-800 rounded-full mb-6">
-                  <motion.div
-                    className={`h-1.5 rounded-full ${timeLeft <= 5 ? "bg-red-500" : "bg-primary-500"}`}
-                    style={{ width: `${currentQ ? (timeLeft / currentQ.time_limit) * 100 : 100}%` }}
-                    transition={{ duration: 1, ease: "linear" }}
-                  />
-                </div>
+                {/* Timer bar (hidden for untimed questions) */}
+                {currentQ.time_limit > 0 && (
+                  <div className="h-1.5 bg-slate-800 rounded-full mb-6">
+                    <motion.div
+                      className={`h-1.5 rounded-full ${timeLeft <= 5 ? "bg-red-500" : "bg-primary-500"}`}
+                      style={{ width: `${(timeLeft / currentQ.time_limit) * 100}%` }}
+                      transition={{ duration: 1, ease: "linear" }}
+                    />
+                  </div>
+                )}
 
                 {/* Question */}
                 <div className="bg-slate-900 rounded-2xl p-6 mb-6">
@@ -209,20 +239,23 @@ export default function StudentQuizPage() {
                 </div>
 
                 {/* Options */}
+                {currentQ.multiple && phase === "question" && (
+                  <p className="text-center text-xs text-slate-400 mb-2">Select all that apply, then submit</p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {currentQ.options.map((opt, i) => {
                     const color = OPTION_COLORS[i];
-                    const isSelected = selectedAnswer === i;
+                    const isSelected = currentQ.multiple ? selectedSet.includes(i) : selectedAnswer === i;
                     const locked = phase === "submitted" || phase === "revealed";
-                    const isRight = phase === "revealed" && i === correctAnswer;
-                    const isWrong = phase === "revealed" && isSelected && !isCorrect;
+                    const isRight = phase === "revealed" && correctAnswers.includes(i);
+                    const isWrong = phase === "revealed" && isSelected && !correctAnswers.includes(i);
 
                     return (
                       <motion.button
                         key={i}
                         whileTap={{ scale: 0.97 }}
                         onClick={() => handleAnswer(i)}
-                        disabled={selectedAnswer !== null}
+                        disabled={submitted}
                         className={`relative p-4 rounded-2xl text-left font-semibold transition-all text-white
                           ${isRight ? "bg-primary-500 ring-4 ring-primary-300" :
                             isWrong ? "bg-red-500/50 opacity-70" :
@@ -233,7 +266,7 @@ export default function StudentQuizPage() {
                       >
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center font-black text-sm flex-shrink-0">
-                            {String.fromCharCode(65 + i)}
+                            {currentQ.multiple && isSelected && phase === "question" ? <Check className="w-4 h-4" /> : String.fromCharCode(65 + i)}
                           </span>
                           <span className="text-sm leading-tight">{opt}</span>
                         </div>
@@ -246,6 +279,20 @@ export default function StudentQuizPage() {
                     );
                   })}
                 </div>
+
+                {/* Submit button for multiple-answer questions */}
+                {currentQ.multiple && phase === "question" && (
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSubmitMultiple}
+                    disabled={selectedSet.length === 0}
+                    className="mt-4 w-full rounded-2xl bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed py-4 font-bold text-white transition-colors"
+                  >
+                    Submit {selectedSet.length > 0 && `(${selectedSet.length} selected)`}
+                  </motion.button>
+                )}
 
                 {phase === "submitted" && (
                   <motion.div

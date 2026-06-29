@@ -31,9 +31,11 @@ class Question(Base):
     id = Column(Integer, primary_key=True, index=True)
     quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False)
     text = Column(Text, nullable=False)
-    options = Column(JSON, nullable=False)  # list of 4 strings
-    correct_answer = Column(Integer, nullable=False)  # 0-3 index
-    time_limit = Column(Integer, default=30)  # seconds
+    options = Column(JSON, nullable=False)  # list of strings
+    correct_answer = Column(Integer, nullable=False)  # 0-3 index (single-answer questions)
+    multiple = Column(Boolean, default=False, nullable=False)  # select-all-that-apply
+    correct_answers = Column(JSON, nullable=True)  # list[int] of correct indices when multiple
+    time_limit = Column(Integer, default=30)  # seconds; 0 = no time limit (ends on teacher's Next)
     points = Column(Integer, default=1000, nullable=False)  # base points for a correct answer
     order = Column(Integer, default=0)
 

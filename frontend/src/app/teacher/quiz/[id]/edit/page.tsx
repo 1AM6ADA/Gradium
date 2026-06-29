@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Check, X, Play, Upload,
   Sparkles, GripVertical, Clock, AlertCircle, Loader2, ChevronDown, ChevronUp,
-  SlidersHorizontal, Trophy
+  SlidersHorizontal, Trophy, CheckSquare
 } from "lucide-react";
 import { quizApi } from "@/lib/api";
 import Navbar from "@/components/layout/navbar";
@@ -17,6 +17,8 @@ interface Question {
   text: string;
   options: string[];
   correct_answer: number;
+  multiple: boolean;
+  correct_answers: number[] | null;
   time_limit: number;
   points: number;
   order: number;
@@ -32,7 +34,7 @@ interface Quiz {
   questions: Question[];
 }
 
-const BLANK_Q = { text: "", options: ["", "", "", ""], correct_answer: 0, time_limit: 30, points: 1000 };
+const BLANK_Q = { text: "", options: ["", "", "", ""], correct_answer: 0, multiple: false, correct_answers: [] as number[], time_limit: 30, points: 1000 };
 
 export default function EditQuizPage() {
   const { id } = useParams<{ id: string }>();
@@ -59,7 +61,15 @@ export default function EditQuizPage() {
 
   const startEdit = (q: Question) => {
     setEditingId(q.id);
-    setForm({ text: q.text, options: [...q.options], correct_answer: q.correct_answer, time_limit: q.time_limit, points: q.points ?? 1000 });
+    setForm({
+      text: q.text,
+      options: [...q.options],
+      correct_answer: q.correct_answer,
+      multiple: q.multiple ?? false,
+      correct_answers: q.correct_answers ?? [],
+      time_limit: q.time_limit,
+      points: q.points ?? 1000,
+    });
     setError("");
   };
 
@@ -92,6 +102,7 @@ export default function EditQuizPage() {
   const validateForm = () => {
     if (!form.text.trim()) return "Question text is required";
     if (form.options.some((o) => !o.trim())) return "All 4 options are required";
+    if (form.multiple && form.correct_answers.length === 0) return "Mark at least one correct answer";
     return null;
   };
 
@@ -303,26 +314,34 @@ export default function EditQuizPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 dark:text-white mb-2">{q.text}</p>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {q.options.map((opt, i) => (
-                        <div
-                          key={i}
-                          className={`text-xs px-2.5 py-1.5 rounded-lg ${
-                            i === q.correct_answer
-                              ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 font-semibold"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                          }`}
-                        >
-                          {String.fromCharCode(65 + i)}. {opt}
-                        </div>
-                      ))}
+                      {q.options.map((opt, i) => {
+                        const correct = q.multiple ? (q.correct_answers ?? []).includes(i) : i === q.correct_answer;
+                        return (
+                          <div
+                            key={i}
+                            className={`text-xs px-2.5 py-1.5 rounded-lg ${
+                              correct
+                                ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 font-semibold"
+                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                            }`}
+                          >
+                            {String.fromCharCode(65 + i)}. {opt}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="flex items-center gap-3 mt-2">
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
                       <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />{q.time_limit}s
+                        <Clock className="w-3 h-3" />{q.time_limit === 0 ? "No limit" : `${q.time_limit}s`}
                       </span>
                       <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
                         <Trophy className="w-3 h-3" />{q.points ?? 1000} pts
                       </span>
+                      {q.multiple && (
+                        <span className="text-xs text-primary-600 dark:text-primary-400 flex items-center gap-1 font-semibold">
+                          <CheckSquare className="w-3 h-3" />Multiple
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
@@ -393,49 +412,100 @@ function QuestionForm({
             onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
           />
         </div>
+        {/* Question type toggles */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setForm((f) => {
+              const turningOn = !f.multiple;
+              return {
+                ...f,
+                multiple: turningOn,
+                // seed multi-correct from the single answer when switching on
+                correct_answers: turningOn && f.correct_answers.length === 0 ? [f.correct_answer] : f.correct_answers,
+              };
+            })}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+              form.multiple
+                ? "bg-primary-600 border-primary-600 text-white"
+                : "border-slate-300 dark:border-slate-600 text-slate-500 hover:border-primary-400"
+            }`}
+          >
+            {form.multiple ? "✓ " : ""}Multiple answers
+          </button>
+          <button
+            type="button"
+            onClick={() => setForm((f) => ({ ...f, time_limit: f.time_limit === 0 ? 30 : 0 }))}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+              form.time_limit === 0
+                ? "bg-primary-600 border-primary-600 text-white"
+                : "border-slate-300 dark:border-slate-600 text-slate-500 hover:border-primary-400"
+            }`}
+          >
+            {form.time_limit === 0 ? "✓ " : ""}No time limit
+          </button>
+        </div>
+
         <div>
           <label className="label text-xs">Answer options</label>
           <div className="space-y-2">
-            {form.options.map((opt, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, correct_answer: i }))}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors border-2 ${
-                    form.correct_answer === i
-                      ? "bg-primary-600 border-primary-600 text-white"
-                      : "border-slate-300 dark:border-slate-600 text-slate-400 hover:border-primary-400"
-                  }`}
-                >
-                  {String.fromCharCode(65 + i)}
-                </button>
-                <input
-                  className="input"
-                  placeholder={`Option ${String.fromCharCode(65 + i)}`}
-                  value={opt}
-                  onChange={(e) => setForm((f) => {
-                    const opts = [...f.options];
-                    opts[i] = e.target.value;
-                    return { ...f, options: opts };
-                  })}
-                />
-              </div>
-            ))}
-            <p className="text-xs text-slate-400 mt-1">Click the letter to mark correct answer</p>
+            {form.options.map((opt, i) => {
+              const isCorrect = form.multiple ? form.correct_answers.includes(i) : form.correct_answer === i;
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => {
+                      if (f.multiple) {
+                        const set = f.correct_answers.includes(i)
+                          ? f.correct_answers.filter((x) => x !== i)
+                          : [...f.correct_answers, i];
+                        return { ...f, correct_answers: set };
+                      }
+                      return { ...f, correct_answer: i };
+                    })}
+                    className={`w-7 h-7 flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors border-2 ${
+                      form.multiple ? "rounded-md" : "rounded-full"
+                    } ${
+                      isCorrect
+                        ? "bg-primary-600 border-primary-600 text-white"
+                        : "border-slate-300 dark:border-slate-600 text-slate-400 hover:border-primary-400"
+                    }`}
+                  >
+                    {String.fromCharCode(65 + i)}
+                  </button>
+                  <input
+                    className="input"
+                    placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                    value={opt}
+                    onChange={(e) => setForm((f) => {
+                      const opts = [...f.options];
+                      opts[i] = e.target.value;
+                      return { ...f, options: opts };
+                    })}
+                  />
+                </div>
+              );
+            })}
+            <p className="text-xs text-slate-400 mt-1">
+              {form.multiple ? "Tick every correct option (square = checkbox)" : "Click the letter to mark the correct answer"}
+            </p>
           </div>
         </div>
         <div className="flex gap-4">
-          <div>
-            <label className="label text-xs">Time limit (seconds)</label>
-            <input
-              type="number"
-              min={5}
-              max={300}
-              className="input w-32"
-              value={form.time_limit}
-              onChange={(e) => setForm((f) => ({ ...f, time_limit: Number(e.target.value) }))}
-            />
-          </div>
+          {form.time_limit !== 0 && (
+            <div>
+              <label className="label text-xs">Time limit (seconds)</label>
+              <input
+                type="number"
+                min={5}
+                max={300}
+                className="input w-32"
+                value={form.time_limit}
+                onChange={(e) => setForm((f) => ({ ...f, time_limit: Number(e.target.value) }))}
+              />
+            </div>
+          )}
           <div>
             <label className="label text-xs">Points</label>
             <input

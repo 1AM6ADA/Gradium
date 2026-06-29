@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -41,7 +41,8 @@ class Answer(Base):
     id = Column(Integer, primary_key=True, index=True)
     participant_id = Column(Integer, ForeignKey("participants.id"), nullable=False)
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
-    answer = Column(Integer, nullable=False)  # 0-3 index
+    answer = Column(Integer, nullable=False)  # single-answer index (-1 if multiple)
+    selected = Column(JSON, nullable=True)  # list[int] of selected indices when multiple
     is_correct = Column(Boolean, default=False)
     time_taken = Column(Float, default=0.0)
 

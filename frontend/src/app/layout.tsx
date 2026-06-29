@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Spectral } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/providers/theme-provider";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const spectral = Spectral({ subsets: ["latin"], variable: "--font-display", weight: ["300", "400", "500", "600"] });
 
 export const metadata: Metadata = {
-  title: "EduTest AI — Smart Quiz Platform",
-  description: "Create AI-powered quizzes from your slides. Run live interactive quizzes. Summarize PDFs instantly.",
+  title: "Gradium — Composed learning",
+  description: "Turn your slides into live quizzes. Calm, considered, and built to last.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.variable} ${spectral.variable} font-sans`}>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
