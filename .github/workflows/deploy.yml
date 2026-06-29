@@ -30,6 +30,16 @@ jobs:
           NEXT_PUBLIC_WS_URL=ws://10.93.27.10:8000
           EOF
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
       - name: Show Docker version
         run: |
           docker --version
@@ -38,8 +48,9 @@ jobs:
       - name: Backend tests
         run: |
           cd backend
-          pip install -r requirements.txt
-          pytest tests --cov=app --cov-report=term
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pytest tests --cov=app --cov-report=term
 
       - name: Frontend tests
         run: |
