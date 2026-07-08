@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import fitz  # PyMuPDF
 
@@ -8,6 +9,28 @@ LINE_HEIGHT = 16
 FONT_SIZE = 11
 TITLE_SIZE = 18
 HEADING_SIZE = 14
+
+
+def _find_font(names: tuple[str, ...]) -> str | None:
+    for base in (
+        "/usr/share/fonts/truetype/dejavu",
+        "/usr/share/fonts/dejavu",
+        "/usr/share/fonts/TTF",
+        "/usr/share/fonts/truetype/liberation",
+    ):
+        for name in names:
+            p = Path(base) / name
+            if p.exists():
+                return str(p)
+    return None
+
+
+# PyMuPDF's built-in Base-14 fonts (helv/hebo) cover Latin-1 only, so Cyrillic
+# (or any other non-Latin) quiz text would render as garbage in the exported
+# handout. Prefer a system TTF with full Unicode coverage when available
+# (fonts-dejavu is installed in the backend Docker image).
+_UNI_FONT = _find_font(("DejaVuSans.ttf", "LiberationSans-Regular.ttf"))
+_UNI_FONT_BOLD = _find_font(("DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf")) or _UNI_FONT
 
 
 def _wrap(text: str, width: int = 92) -> list[str]:
@@ -29,7 +52,14 @@ class _Writer:
     def line(self, text: str, size: float = FONT_SIZE, bold: bool = False, gap: float = 0):
         if self.y + LINE_HEIGHT > PAGE_H - MARGIN:
             self._new_page()
-        self.page.insert_text((MARGIN, self.y), text, fontsize=size, fontname="hebo" if bold else "helv")
+        fontfile = _UNI_FONT_BOLD if bold else _UNI_FONT
+        if fontfile:
+            self.page.insert_text(
+                (MARGIN, self.y), text, fontsize=size,
+                fontname="uni-bold" if bold else "uni", fontfile=fontfile,
+            )
+        else:
+            self.page.insert_text((MARGIN, self.y), text, fontsize=size, fontname="hebo" if bold else "helv")
         self.y += LINE_HEIGHT + gap
 
     def space(self, amount: float = LINE_HEIGHT):

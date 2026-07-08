@@ -1,13 +1,29 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
+from jose import jwt
 from datetime import datetime
 import json, asyncio, random
 
+from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models.session import QuizSession, Participant, Answer
 from app.models.quiz import Question
 
 router = APIRouter()
+
+
+def _ws_user_id(ws: WebSocket) -> int | None:
+    """Resolve the authenticated user from the ?token= query parameter.
+    Browsers can't set an Authorization header on WebSockets, so the JWT
+    travels as a query param instead."""
+    token = ws.query_params.get("token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return int(payload.get("sub"))
+    except Exception:
+        return None
 
 
 class ConnectionManager:
@@ -129,8 +145,9 @@ async def _send_question_to_students(code: str, q: Question, index: int, total: 
 
 @router.websocket("/teacher/{code}")
 async def teacher_ws(code: str, ws: WebSocket):
-    await manager.connect_teacher(code, ws)
+    await ws.accept()
     db = SessionLocal()
+    registered = False
     try:
         session = db.query(QuizSession).filter(QuizSession.code == code).first()
         if not session:
@@ -138,11 +155,25 @@ async def teacher_ws(code: str, ws: WebSocket):
             await ws.close()
             return
 
+        # Only the teacher who owns this quiz may drive the session — the
+        # 6-char code is public knowledge (it's on every student's screen),
+        # so without this check any student could start/end/reveal.
+        user_id = _ws_user_id(ws)
+        if user_id is None or session.quiz.teacher_id != user_id:
+            await ws.send_json({"type": "error", "message": "Not authorized to control this session"})
+            await ws.close()
+            return
+
+        manager.teachers[code] = ws
+        registered = True
+
         await ws.send_json({
             "type": "connected",
             "session_code": code,
             "status": session.status,
             "participant_count": len(session.participants),
+            # Roster so a page refresh / reconnect doesn't show an empty list.
+            "participants": [p.name for p in session.participants],
         })
 
         while True:
@@ -250,7 +281,10 @@ async def teacher_ws(code: str, ws: WebSocket):
             except Exception as e:
                 await ws.send_json({"type": "error", "message": str(e)})
     finally:
-        manager.disconnect_teacher(code)
+        # Only unregister if this connection actually became THE teacher
+        # socket — otherwise a rejected client would evict the real teacher.
+        if registered and manager.teachers.get(code) is ws:
+            manager.disconnect_teacher(code)
         db.close()
 
 
@@ -281,6 +315,23 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
             "name": participant.name,
             "count": manager.student_count(code),
         })
+
+        # If the quiz is already running (late join or a dropped connection
+        # that reconnected), push the current question immediately instead of
+        # leaving the student stuck on the waiting screen until "next".
+        if session.status == "active":
+            questions = sorted(session.quiz.questions, key=lambda q: q.order)
+            idx = session.current_question_index
+            if 0 <= idx < len(questions):
+                q = questions[idx]
+                already_answered = db.query(Answer).filter(
+                    Answer.participant_id == participant_id,
+                    Answer.question_id == q.id,
+                ).first()
+                if not already_answered:
+                    await ws.send_json(
+                        _build_student_question_payload(q, participant_id, idx, len(questions))
+                    )
 
         while True:
             try:

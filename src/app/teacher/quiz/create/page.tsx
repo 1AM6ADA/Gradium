@@ -11,7 +11,8 @@ import {
 import { quizApi } from "@/lib/api";
 import Navbar from "@/components/layout/navbar";
 
-const ACCEPTED = ".pdf,.pptx,.ppt,.odp,.txt,.md,.png,.jpg,.jpeg";
+// Must match the backend's allowed extensions for /generate uploads.
+const ACCEPTED = ".pdf,.pptx,.ppt,.odp";
 
 type Mode = "quiz" | "test";
 
@@ -253,7 +254,7 @@ function CreateQuizForm() {
                       </div>
                       <p className="font-semibold text-slate-700 dark:text-slate-300">Drop your slides here</p>
                       <p className="text-sm text-slate-400 mt-1">or click to browse</p>
-                      <p className="text-xs text-slate-300 dark:text-slate-600 mt-3">PDF, PPTX, PPT, ODP, TXT, images</p>
+                      <p className="text-xs text-slate-300 dark:text-slate-600 mt-3">PDF, PPTX, PPT, ODP</p>
                     </div>
                   )}
                 </div>
@@ -344,6 +345,12 @@ function CreateQuizForm() {
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
                   {generatedCount} questions generated!
                 </h2>
+                {generatedCount < numQuestions && (
+                  <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
+                    The AI produced {generatedCount} of the {numQuestions} requested questions —
+                    you can generate or add more in the editor.
+                  </p>
+                )}
                 <p className="text-slate-500 dark:text-slate-400 mb-8">
                   {mode === "test"
                     ? "Review the questions, adjust grading and weights, then publish to get your share link."

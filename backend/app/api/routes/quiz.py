@@ -54,6 +54,7 @@ def _create_questions(db: Session, quiz: Quiz, questions: List[dict]) -> List[Qu
             points=q_data.get("points", 1000),
             qtype=q_data.get("qtype", "multiple_choice"),
             grading_mode=q_data.get("grading_mode", "auto"),
+            expected_answer=q_data.get("expected_answer"),
             source_label=q_data.get("source_label"),
             order=len(quiz.questions) + i,
         )
@@ -164,10 +165,10 @@ async def _ingest_source_file(quiz: Quiz, file: UploadFile) -> str:
     steps — regenerate, topic extraction, topic-scoped generation — can all
     reuse the same slide context. Returns the persistent PDF path."""
     original_ext = os.path.splitext(file.filename or "")[1].lower()
-    if original_ext not in {".pdf", ".pptx", ".ppt"}:
+    if original_ext not in {".pdf", ".pptx", ".ppt", ".odp"}:
         raise HTTPException(
             status_code=400,
-            detail="Only PDF and PPTX/PPT files are supported for AI generation",
+            detail="Only PDF, PPTX/PPT and ODP files are supported for AI generation",
         )
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -216,14 +217,18 @@ async def generate_from_slides(
         raise HTTPException(status_code=404, detail="Quiz not found")
 
     persistent_path = await _ingest_source_file(quiz, file)
+    # Don't let the model duplicate questions the quiz already has.
+    avoid_texts = [q.text for q in quiz.questions]
 
     try:
         if quiz.mode == "test":
             questions = await generate_test_questions_from_presentation_pdf(
-                persistent_path, num_questions, num_open_ended
+                persistent_path, num_questions, num_open_ended, avoid_texts=avoid_texts
             )
         else:
-            questions = await generate_questions_from_presentation_pdf(persistent_path, num_questions)
+            questions = await generate_questions_from_presentation_pdf(
+                persistent_path, num_questions, avoid_texts=avoid_texts
+            )
     except AIServiceError as e:
         raise HTTPException(status_code=502, detail=f"AI generation failed: {e}") from e
 
@@ -231,7 +236,11 @@ async def generate_from_slides(
         raise HTTPException(status_code=502, detail="AI generated no valid questions")
 
     created = _create_questions(db, quiz, questions)
-    return {"generated": len(created), "questions": [QuestionOut.model_validate(q) for q in created]}
+    return {
+        "generated": len(created),
+        "requested": num_questions,
+        "questions": [QuestionOut.model_validate(q) for q in created],
+    }
 
 
 @router.post("/{quiz_id}/extract-topics", response_model=List[TopicOut])
@@ -282,15 +291,17 @@ async def generate_from_topics(
     topics = [t.strip() for t in data.topics if t.strip()]
     if not topics:
         raise HTTPException(status_code=400, detail="Select at least one topic")
+    avoid_texts = [q.text for q in quiz.questions]
 
     try:
         if quiz.mode == "test":
             questions = await generate_test_questions_from_presentation_pdf(
-                quiz.source_pdf_path, data.num_questions, data.num_open_ended, topics=topics
+                quiz.source_pdf_path, data.num_questions, data.num_open_ended,
+                topics=topics, avoid_texts=avoid_texts,
             )
         else:
             questions = await generate_questions_from_presentation_pdf(
-                quiz.source_pdf_path, data.num_questions, topics=topics
+                quiz.source_pdf_path, data.num_questions, topics=topics, avoid_texts=avoid_texts
             )
     except AIServiceError as e:
         raise HTTPException(status_code=502, detail=f"AI generation failed: {e}") from e
@@ -299,7 +310,11 @@ async def generate_from_topics(
         raise HTTPException(status_code=502, detail="AI generated no valid questions")
 
     created = _create_questions(db, quiz, questions)
-    return {"generated": len(created), "questions": [QuestionOut.model_validate(q) for q in created]}
+    return {
+        "generated": len(created),
+        "requested": data.num_questions,
+        "questions": [QuestionOut.model_validate(q) for q in created],
+    }
 
 
 @router.post("/{quiz_id}/questions/{q_id}/regenerate", response_model=QuestionOut)
@@ -338,6 +353,11 @@ async def regenerate_question(
     q.correct_answer = replacement["correct_answer"]
     q.points = replacement.get("points", q.points)
     q.source_label = replacement.get("source_label")
+    if q.qtype == "open_ended":
+        # Keep the auto-grading reference in sync with the new question text,
+        # otherwise the LLM would grade answers against the old question's
+        # expected answer.
+        q.expected_answer = replacement.get("expected_answer")
     if "grading_mode" in replacement and q.grading_mode == "auto":
         # Don't silently force manual->auto, but keep auto in sync with the new content
         q.grading_mode = replacement["grading_mode"]

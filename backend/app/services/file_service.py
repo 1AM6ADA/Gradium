@@ -63,13 +63,13 @@ def prepare_pdf_for_gemini(file_path: str, filename: str, output_dir: Optional[s
     if ext == ".pdf":
         return file_path, False
 
-    if ext in {".pptx", ".ppt"}:
+    if ext in {".pptx", ".ppt", ".odp"}:
         if output_dir is None:
             output_dir = str(Path(file_path).parent)
         return convert_presentation_to_pdf(file_path, output_dir), True
 
     raise UnsupportedGenerationFileType(
-        "Only PDF and PPTX/PPT files are supported for AI question generation."
+        "Only PDF, PPTX/PPT and ODP files are supported for AI question generation."
     )
 
 

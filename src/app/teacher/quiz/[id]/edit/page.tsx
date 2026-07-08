@@ -454,7 +454,7 @@ export default function EditQuizPage() {
                     <input
                       ref={fileRef}
                       type="file"
-                      accept=".pdf,.pptx,.ppt,.odp,.txt,.md,.png,.jpg"
+                      accept=".pdf,.pptx,.ppt,.odp"
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
                     />
@@ -496,7 +496,7 @@ export default function EditQuizPage() {
                     <input
                       ref={topicFileRef}
                       type="file"
-                      accept=".pdf,.pptx,.ppt,.odp,.txt,.md,.png,.jpg"
+                      accept=".pdf,.pptx,.ppt,.odp"
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTopicFileUpload(f); }}
                     />
@@ -533,7 +533,7 @@ export default function EditQuizPage() {
                     <div className="flex items-end gap-4">
                       <div className="flex-1">
                         <label className="label text-xs">Number of questions</label>
-                        <input type="number" min={1} max={20} value={numQ} onChange={(e) => setNumQ(Number(e.target.value))} className="input" />
+                        <input type="number" min={1} max={20} value={numQ} onChange={(e) => setNumQ(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} className="input" />
                       </div>
                       <div className="flex-1 flex gap-2">
                         <button

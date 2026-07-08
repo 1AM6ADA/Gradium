@@ -9,9 +9,14 @@ out/
 build/
 *.tsbuildinfo
 npm-debug.log*
-.env
+# NOTE: .env is committed on purpose (private repo) so a fresh clone runs
+# out of the box with the configured AI provider key. Local-only overrides
+# are still ignored.
 .env.local
 *.env.local
+
+# Demo capture — not needed to run the app
+*.mp4
 
 .vscode/
 .idea/

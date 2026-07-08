@@ -217,10 +217,13 @@ export default function AttemptDetailPage() {
                 </div>
               )}
 
-              {a.grading_mode === "auto" ? (
+              {/* Auto questions that failed automatic grading (e.g. the LLM
+                  was unavailable at submit time) fall through to the manual
+                  controls below so the teacher can still score them. */}
+              {a.grading_mode === "auto" && a.graded ? (
                 <div className={`inline-flex items-center gap-2 text-sm font-semibold ${a.is_correct ? "text-primary-600 dark:text-primary-400" : "text-red-500"}`}>
                   {a.is_correct ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                  {a.is_correct ? "Correct" : "Incorrect"} · {a.points_awarded ?? 0} pts (auto-graded)
+                  {a.is_correct ? "Correct" : "Incorrect"} · {a.points_awarded ?? 0} pts{a.qtype === "open_ended" ? " (auto-graded)" : ""}
                 </div>
               ) : (
                 <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">

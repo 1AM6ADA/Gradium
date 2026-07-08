@@ -10,6 +10,7 @@ import {
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { WS_URL } from "@/lib/api";
 import { quizApi } from "@/lib/api";
+import { getToken } from "@/lib/utils";
 import Navbar from "@/components/layout/navbar";
 
 interface Question {
@@ -51,12 +52,22 @@ export default function LiveQuizPage() {
   const [copied, setCopied] = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [joinHost, setJoinHost] = useState("");
+
+  // Resolved client-side so the join URL shows the real deployed host
+  // instead of a hardcoded localhost.
+  useEffect(() => {
+    setJoinHost(window.location.host);
+  }, []);
 
   const handleMessage = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
 
     if (type === "participant_joined") {
-      setParticipants((prev) => [...prev, { name: data.name as string }]);
+      // Students auto-reconnect (and re-announce) after any WS drop —
+      // dedupe by name so the roster doesn't fill with duplicates.
+      const name = data.name as string;
+      setParticipants((prev) => prev.some((p) => p.name === name) ? prev : [...prev, { name }]);
     } else if (type === "question") {
       const q = data.question as Question;
       setCurrentQ(q);
@@ -78,11 +89,15 @@ export default function LiveQuizPage() {
       setLeaderboard(data.leaderboard as LeaderboardEntry[]);
       setPhase("ended");
     } else if (type === "connected") {
-      setParticipants([]); // Reset on reconnect
+      // Server sends the full roster on (re)connect
+      const roster = (data.participants as string[]) ?? [];
+      setParticipants(roster.map((name) => ({ name })));
     }
   }, []);
 
-  const wsUrl = code ? `${WS_URL}/ws/teacher/${code}` : null;
+  const wsUrl = code
+    ? `${WS_URL}/ws/teacher/${code}?token=${encodeURIComponent(getToken() || "")}`
+    : null;
   const { connected, send } = useWebSocket(wsUrl, handleMessage);
 
   // Load whether this quiz takes attendance (controls the CSV button)
@@ -162,7 +177,7 @@ export default function LiveQuizPage() {
               {/* Left: join info */}
               <div className="flex flex-col items-center justify-center py-12">
                 <p className="text-slate-400 text-sm mb-4">Students join at:</p>
-                <p className="text-primary-400 font-mono text-lg mb-6">localhost:3000/student/join</p>
+                <p className="text-primary-400 font-mono text-lg mb-6">{joinHost ? `${joinHost}/student/join` : "…/student/join"}</p>
                 <p className="text-slate-300 mb-3 text-sm">Enter code:</p>
                 <div className="text-6xl font-black font-mono text-white bg-primary-600/20 border-2 border-primary-500 rounded-2xl px-8 py-4 mb-8 tracking-widest">
                   {code}

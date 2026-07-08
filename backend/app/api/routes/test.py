@@ -5,6 +5,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.quiz import Quiz, Question
 from app.models.test_attempt import TestAttempt, TestAnswer
+from app.services import ai_service
 from app.schemas.test import (
     TestInfoOut, TestStartRequest, TestStartResponse, TestQuestionPublic,
     TestSubmitRequest, TestSubmitResponse,
@@ -125,13 +126,17 @@ def submit_test(token: str, data: TestSubmitRequest, db: Session = Depends(get_d
                 is_correct = ans.answer_index == question.correct_answer
                 points_awarded = question.points if is_correct else 0
                 graded = True
-            elif question.qtype == "open_ended" and question.expected_answer:
-                given = _normalize(ans.answer_text or "")
-                expected = _normalize(question.expected_answer)
-                is_correct = bool(expected) and (given == expected or expected in given)
-                points_awarded = question.points if is_correct else 0
-                graded = True
-            # open_ended without an expected_answer falls through to manual
+            elif question.qtype == "open_ended":
+                # LLM-grade the free-text answer (with partial credit) against the
+                # model answer. Falls back to ungraded/manual if the LLM is down.
+                result = ai_service.grade_open_ended_answer(
+                    question.text, ans.answer_text or "", question.points, question.expected_answer,
+                )
+                if result.get("graded", True):
+                    is_correct = result["is_correct"]
+                    points_awarded = result["points_awarded"]
+                    graded = True
+                # else: leave graded=False so the teacher can grade it manually
 
         db.add(TestAnswer(
             attempt_id=attempt.id,

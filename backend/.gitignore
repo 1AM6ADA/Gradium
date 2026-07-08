@@ -1,4 +1,5 @@
-.env
+# backend/.env is committed on purpose (private repo) so a fresh clone runs
+# out of the box with the configured AI provider key.
 venv/
 __pycache__/
 *.pyc
