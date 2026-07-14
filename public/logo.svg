@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" role="img" aria-label="Gradium" style="color:#1b2a3d">
+  <defs>
+    <linearGradient id="gradiumLockup" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#41597a"/>
+      <stop offset="1" stop-color="#202f45"/>
+    </linearGradient>
+  </defs>
+  <!-- Mark tile (56×56) -->
+  <g transform="translate(6,8) scale(0.875)">
+    <rect width="64" height="64" rx="15" fill="url(#gradiumLockup)"/>
+    <path d="M49.8 34 A18 18 0 1 1 47.3 22.5" fill="none" stroke="#ffffff" stroke-width="7.5" stroke-linecap="round"/>
+    <path d="M49.8 34 L35 31.5" fill="none" stroke="#ffffff" stroke-width="7.5" stroke-linecap="round"/>
+  </g>
+  <!-- Wordmark in Spectral (the site's display serif); falls back to Georgia. currentColor adapts to light/dark. -->
+  <text x="78" y="49" font-family="Spectral, Georgia, 'Times New Roman', serif" font-size="40" letter-spacing="0.5" fill="currentColor">Gradium</text>
+</svg>

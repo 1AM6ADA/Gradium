@@ -26,7 +26,7 @@ def get_current_user(
     return user
 
 
-def require_premium(current_user: User = Depends(get_current_user)) -> User:
-    if not current_user.is_premium:
-        raise HTTPException(status_code=403, detail="premium_required")
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="admin_required")
     return current_user

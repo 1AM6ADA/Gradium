@@ -29,6 +29,11 @@ class Participant(Base):
     email = Column(String, nullable=True)  # collected when attendance is enabled
     score = Column(Integer, default=0)
     current_streak = Column(Integer, default=0, nullable=False)  # consecutive correct answers
+    # Private per-participant token returned to the joiner's browser. Only a
+    # request presenting the matching token may re-claim this name/identity, so
+    # a different student can't take over an existing participant by reusing
+    # their display name.
+    join_token = Column(String, nullable=True)
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("QuizSession", back_populates="participants")

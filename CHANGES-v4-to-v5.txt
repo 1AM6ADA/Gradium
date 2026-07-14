@@ -1,0 +1,68 @@
+===============================================================================
+ GRADIUM  —  CHANGES FROM v4 TO v5
+===============================================================================
+
+-------------------------------------------------------------------------------
+ 1. NEW AI PROVIDER: GigaChat (Sber)
+-------------------------------------------------------------------------------
+Files: config.py, ai_service.py
+
+v4 had two providers: Gemini (visual) and DeepSeek (text).
+v5 adds GigaChat as a third provider.
+
+  * Handles Sber's 2-step OAuth (auth key -> short-lived token, cached &
+    auto-refreshed); text-based generation like DeepSeek.
+  * Wired into all four generation paths (quiz, test, topics, regenerate).
+  * Selected via AI_PROVIDER=gigachat — now the default in v5.
+
+
+-------------------------------------------------------------------------------
+ 2. DEEPER QUESTIONS ("глубокие вопросы")
+-------------------------------------------------------------------------------
+File: ai_service.py
+
+A new _depth_block() is injected into the quiz/test/regenerate prompts. It
+forbids shallow recall / copy-a-phrase questions and forces higher-order ones
+(analysis, cause-effect, "what would happen if...", scenario-based) with
+plausible-misconception distractors.
+
+-------------------------------------------------------------------------------
+ 3. OPEN-ENDED ANSWERS ARE NOW AUTO-GRADED
+-------------------------------------------------------------------------------
+Files: ai_service.py, quiz.py, test.py
+
+In v4, open-ended questions were manual-grade only, so a student's answer
+always showed 0 until a teacher graded it by hand. In v5:
+
+  * Generation produces a model expected_answer and marks the question "auto".
+  * _create_questions now persists expected_answer.
+  * On submit, a new grade_open_ended_answer() uses the LLM to score the
+    free-text answer 0 -> max with partial credit and a one-line
+    justification (graceful fallback to manual if the model is down).
+
+  Result: open-ended answers get a real score instead of 0.
+  (No DB change — the expected_answer / grading_mode columns already existed
+  in v4's model.)
+
+
+-------------------------------------------------------------------------------
+ 4. MODEL / CONFIG
+-------------------------------------------------------------------------------
+Default model is GigaChat-2 (the "lite" tier). New GigaChat settings added to
+config.py, .env, .env.example.
+
+
+-------------------------------------------------------------------------------
+ 5. DEPLOYMENT & SECURITY HARDENING  (v5 deploy files only)
+-------------------------------------------------------------------------------
+Files: docker-compose.yml, .env.example
+
+v4's compose only knew Gemini/DeepSeek. v5's:
+
+  * Adds GigaChat env wiring; defaults to the GigaChat provider.
+  * Container hardening (added after the live deploy was compromised):
+      - frontend: read_only rootfs + noexec tmpfs
+      - both services: cap_drop: ALL + no-new-privileges
+                       + pids_limit + mem_limit / cpus
+
+===============================================================================

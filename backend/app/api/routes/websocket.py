@@ -1,13 +1,29 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
+from jose import jwt
 from datetime import datetime
-import json, asyncio
+import json, asyncio, random
 
+from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models.session import QuizSession, Participant, Answer
 from app.models.quiz import Question
 
 router = APIRouter()
+
+
+def _ws_user_id(ws: WebSocket) -> int | None:
+    """Resolve the authenticated user from the ?token= query parameter.
+    Browsers can't set an Authorization header on WebSockets, so the JWT
+    travels as a query param instead."""
+    token = ws.query_params.get("token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return int(payload.get("sub"))
+    except Exception:
+        return None
 
 
 class ConnectionManager:
@@ -77,10 +93,61 @@ def get_session_db():
         db.close()
 
 
+def _seeded_permutation(participant_id: int, question_id: int, n: int) -> list[int]:
+    """Deterministic per-(participant, question) shuffle of option indices.
+
+    Anti-cheat: each student sees the same options in a different order, so
+    "the answer is C" can't be shouted across the room. Re-derived from the
+    seed every time (on question send, answer submit, and reveal) instead of
+    being stored, so no extra DB/connection state is needed.
+    perm[shuffled_position] = canonical_index.
+    """
+    indices = list(range(n))
+    random.Random(f"{participant_id}:{question_id}").shuffle(indices)
+    return indices
+
+
+def _invert_permutation(perm: list[int]) -> list[int]:
+    """inv[canonical_index] = shuffled_position — the reverse mapping."""
+    inv = [0] * len(perm)
+    for shuffled_pos, canonical_idx in enumerate(perm):
+        inv[canonical_idx] = shuffled_pos
+    return inv
+
+
+def _map_idx(mapping: list[int], idx):
+    if not isinstance(idx, int) or idx < 0 or idx >= len(mapping):
+        return idx
+    return mapping[idx]
+
+
+def _build_student_question_payload(q: Question, participant_id: int, index: int, total: int) -> dict:
+    options = q.options or []
+    perm = _seeded_permutation(participant_id, q.id, len(options))
+    return {
+        "type": "question",
+        "index": index,
+        "total": total,
+        "question": {
+            "id": q.id,
+            "text": q.text,
+            "options": [options[i] for i in perm],
+            "time_limit": q.time_limit,
+            "multiple": q.multiple,
+        },
+    }
+
+
+async def _send_question_to_students(code: str, q: Question, index: int, total: int):
+    for pid in list(manager.students.get(code, {}).keys()):
+        await manager.send_to_student(code, pid, _build_student_question_payload(q, pid, index, total))
+
+
 @router.websocket("/teacher/{code}")
 async def teacher_ws(code: str, ws: WebSocket):
-    await manager.connect_teacher(code, ws)
+    await ws.accept()
     db = SessionLocal()
+    registered = False
     try:
         session = db.query(QuizSession).filter(QuizSession.code == code).first()
         if not session:
@@ -88,11 +155,25 @@ async def teacher_ws(code: str, ws: WebSocket):
             await ws.close()
             return
 
+        # Only the teacher who owns this quiz may drive the session — the
+        # 6-char code is public knowledge (it's on every student's screen),
+        # so without this check any student could start/end/reveal.
+        user_id = _ws_user_id(ws)
+        if user_id is None or session.quiz.teacher_id != user_id:
+            await ws.send_json({"type": "error", "message": "Not authorized to control this session"})
+            await ws.close()
+            return
+
+        manager.teachers[code] = ws
+        registered = True
+
         await ws.send_json({
             "type": "connected",
             "session_code": code,
             "status": session.status,
             "participant_count": len(session.participants),
+            # Roster so a page refresh / reconnect doesn't show an empty list.
+            "participants": [p.name for p in session.participants],
         })
 
         while True:
@@ -115,7 +196,8 @@ async def teacher_ws(code: str, ws: WebSocket):
                     questions = sorted(quiz.questions, key=lambda q: q.order)
                     q = questions[0]
 
-                    payload = {
+                    await _send_question_to_students(code, q, 0, len(questions))
+                    teacher_payload = {
                         "type": "question",
                         "index": 0,
                         "total": len(questions),
@@ -127,8 +209,7 @@ async def teacher_ws(code: str, ws: WebSocket):
                             "multiple": q.multiple,
                         },
                     }
-                    await manager.broadcast_to_students(code, payload)
-                    await ws.send_json({**payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
+                    await ws.send_json({**teacher_payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "next":
                     if session.status != "active":
@@ -150,7 +231,8 @@ async def teacher_ws(code: str, ws: WebSocket):
                         session.current_question_index = next_idx
                         db.commit()
                         q = questions[next_idx]
-                        payload = {
+                        await _send_question_to_students(code, q, next_idx, len(questions))
+                        teacher_payload = {
                             "type": "question",
                             "index": next_idx,
                             "total": len(questions),
@@ -162,8 +244,7 @@ async def teacher_ws(code: str, ws: WebSocket):
                                 "multiple": q.multiple,
                             },
                         }
-                        await manager.broadcast_to_students(code, payload)
-                        await ws.send_json({**payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
+                        await ws.send_json({**teacher_payload, "correct_answer": q.correct_answer, "correct_answers": q.correct_answers})
 
                 elif msg_type == "end":
                     session.status = "finished"
@@ -200,7 +281,10 @@ async def teacher_ws(code: str, ws: WebSocket):
             except Exception as e:
                 await ws.send_json({"type": "error", "message": str(e)})
     finally:
-        manager.disconnect_teacher(code)
+        # Only unregister if this connection actually became THE teacher
+        # socket — otherwise a rejected client would evict the real teacher.
+        if registered and manager.teachers.get(code) is ws:
+            manager.disconnect_teacher(code)
         db.close()
 
 
@@ -232,6 +316,23 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
             "count": manager.student_count(code),
         })
 
+        # If the quiz is already running (late join or a dropped connection
+        # that reconnected), push the current question immediately instead of
+        # leaving the student stuck on the waiting screen until "next".
+        if session.status == "active":
+            questions = sorted(session.quiz.questions, key=lambda q: q.order)
+            idx = session.current_question_index
+            if 0 <= idx < len(questions):
+                q = questions[idx]
+                already_answered = db.query(Answer).filter(
+                    Answer.participant_id == participant_id,
+                    Answer.question_id == q.id,
+                ).first()
+                if not already_answered:
+                    await ws.send_json(
+                        _build_student_question_payload(q, participant_id, idx, len(questions))
+                    )
+
         while True:
             try:
                 data = await ws.receive_json()
@@ -243,13 +344,20 @@ async def student_ws(code: str, participant_id: int, ws: WebSocket):
                         continue
 
                     q_id = data.get("question_id")
-                    answer_idx = data.get("answer")
-                    selected = data.get("selected")  # list[int] for multiple-answer
+                    raw_answer_idx = data.get("answer")
+                    raw_selected = data.get("selected")  # list[int] for multiple-answer
                     time_taken = data.get("time_taken", 0)
 
                     question = db.query(Question).filter(Question.id == q_id).first()
                     if not question:
                         continue
+
+                    # The student answered against their own shuffled option
+                    # order (see _seeded_permutation) — translate back to the
+                    # canonical indices before storing/scoring.
+                    perm = _seeded_permutation(participant_id, q_id, len(question.options or []))
+                    answer_idx = _map_idx(perm, raw_answer_idx)
+                    selected = [_map_idx(perm, i) for i in raw_selected] if raw_selected else raw_selected
 
                     existing = db.query(Answer).filter(
                         Answer.participant_id == participant_id,
@@ -356,14 +464,22 @@ async def _reveal_current_question(db, session: QuizSession, code: str):
             Answer.participant_id == pid,
             Answer.question_id == q.id,
         ).first()
+
+        # Stored answers/correct indices are canonical — re-derive this
+        # student's permutation to express everything back in the shuffled
+        # order they were actually shown (see _seeded_permutation).
+        perm = _seeded_permutation(pid, q.id, len(q.options or []))
+        inv = _invert_permutation(perm)
+        canonical_correct_answers = q.correct_answers if q.multiple else [q.correct_answer]
+
         await manager.send_to_student(code, pid, {
             "type": "reveal",
             "question_id": q.id,
-            "correct_answer": q.correct_answer,
-            "correct_answers": q.correct_answers if q.multiple else [q.correct_answer],
+            "correct_answer": _map_idx(inv, q.correct_answer),
+            "correct_answers": [_map_idx(inv, c) for c in (canonical_correct_answers or [])],
             "multiple": q.multiple,
-            "your_answer": answer.answer if answer else None,
-            "your_selected": answer.selected if answer else None,
+            "your_answer": _map_idx(inv, answer.answer) if answer else None,
+            "your_selected": [_map_idx(inv, s) for s in (answer.selected or [])] if answer and answer.selected else (answer.selected if answer else None),
             "correct": bool(answer.is_correct) if answer else False,
             "answered": answer is not None,
             "points": participant.score if participant else 0,

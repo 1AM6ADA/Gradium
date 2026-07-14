@@ -8,6 +8,45 @@ class UnsupportedGenerationFileType(ValueError):
     pass
 
 
+class TextExtractionError(RuntimeError):
+    pass
+
+
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """Extract plain text from a PDF, page by page.
+
+    Used for text-only LLM providers (e.g. DeepSeek) that cannot read PDF
+    bytes directly the way Gemini can. Gemini keeps using the PDF visually;
+    this is only consulted when settings.AI_PROVIDER == "deepseek".
+    """
+    import fitz  # PyMuPDF
+
+    path = Path(pdf_path)
+    if not path.exists():
+        raise TextExtractionError(f"PDF file not found: {pdf_path}")
+
+    try:
+        doc = fitz.open(str(path))
+    except Exception as exc:
+        raise TextExtractionError(f"Could not open PDF: {exc}") from exc
+
+    pages = []
+    try:
+        for i, page in enumerate(doc):
+            text = page.get_text("text").strip()
+            if text:
+                pages.append(f"--- Slide/Page {i + 1} ---\n{text}")
+    finally:
+        doc.close()
+
+    full_text = "\n\n".join(pages).strip()
+    if not full_text:
+        raise TextExtractionError(
+            "No extractable text found in this PDF (it may be scanned images only)."
+        )
+    return full_text
+
+
 class PresentationConversionError(RuntimeError):
     pass
 
@@ -24,13 +63,13 @@ def prepare_pdf_for_gemini(file_path: str, filename: str, output_dir: Optional[s
     if ext == ".pdf":
         return file_path, False
 
-    if ext in {".pptx", ".ppt"}:
+    if ext in {".pptx", ".ppt", ".odp"}:
         if output_dir is None:
             output_dir = str(Path(file_path).parent)
         return convert_presentation_to_pdf(file_path, output_dir), True
 
     raise UnsupportedGenerationFileType(
-        "Only PDF and PPTX/PPT files are supported for AI question generation."
+        "Only PDF, PPTX/PPT and ODP files are supported for AI question generation."
     )
 
 
