@@ -1,0 +1,16 @@
+# Single ingress for Gradium: serves the app on port 80 so the site works at
+# http://gradium.com.ru with no port and no CORS (frontend + API share one
+# origin). WebSocket upgrades are proxied transparently by reverse_proxy.
+#
+# To add HTTPS later, replace ":80" with your domain (e.g. "gradium.com.ru")
+# and Caddy will auto-provision a Let's Encrypt certificate.
+:80 {
+	encode gzip
+
+	# API + live-quiz WebSocket -> FastAPI backend
+	@backend path /api/* /ws/*
+	reverse_proxy @backend backend:8000
+
+	# Everything else -> Next.js frontend
+	reverse_proxy frontend:3000
+}

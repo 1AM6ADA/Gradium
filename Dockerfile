@@ -10,10 +10,12 @@ RUN npm ci
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* values are inlined into the client bundle at build time,
-# so the browser-facing API/WS URLs must be supplied here.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ARG NEXT_PUBLIC_WS_URL=ws://localhost:8000
+# NEXT_PUBLIC_* values are inlined into the client bundle at build time. Empty
+# defaults => same-origin: the browser talks to the page's own origin and the
+# reverse proxy routes /api and /ws to the backend (no port, no CORS). Supply a
+# full origin here only for split-origin builds.
+ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_WS_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
     NEXT_TELEMETRY_DISABLED=1

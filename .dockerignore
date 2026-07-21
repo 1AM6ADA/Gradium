@@ -1,3 +1,6 @@
+# Never bake dev env files into the image; API/WS URLs come from build args.
+.env
+.env.*
 node_modules/
 .next/
 out/

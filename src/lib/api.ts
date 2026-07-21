@@ -1,7 +1,11 @@
 import axios from "axios";
 import { getToken } from "./utils";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same-origin by default: the reverse proxy routes /api and /ws to the backend,
+// so the browser talks only to the page's own origin (no port, no CORS). Set
+// NEXT_PUBLIC_API_URL to a full origin for split-origin setups (e.g. local dev
+// pointing the frontend at http://localhost:8000).
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -195,4 +199,11 @@ export const studentApi = {
   },
 };
 
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+// Same-origin WebSocket by default, derived from the page URL (ws/wss + host)
+// so it follows the proxy origin without a rebuild. Override with
+// NEXT_PUBLIC_WS_URL for split-origin setups (e.g. local dev → ws://localhost:8000).
+export const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ||
+  (typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+    : "");
