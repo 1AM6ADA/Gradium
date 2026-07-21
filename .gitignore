@@ -9,10 +9,11 @@ out/
 build/
 *.tsbuildinfo
 npm-debug.log*
-# NOTE: .env is committed on purpose (private repo) so a fresh clone runs
-# out of the box with the configured AI provider key. Local-only overrides
-# are still ignored.
-.env.local
+# Secrets — never commit real .env files. Only .env.example (a template with
+# empty values) is tracked. This also covers backend/.env and any *.env.local.
+.env
+.env.*
+!.env.example
 *.env.local
 
 # Demo capture — not needed to run the app

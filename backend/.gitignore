@@ -1,5 +1,8 @@
-# backend/.env is committed on purpose (private repo) so a fresh clone runs
-# out of the box with the configured AI provider key.
+# Secrets — never commit .env (use the root .env.example as a template)
+.env
+.env.*
+!.env.example
+
 venv/
 __pycache__/
 *.pyc
