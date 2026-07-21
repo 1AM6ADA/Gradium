@@ -1,7 +1,7 @@
 # Gradium — Security Hardening
 
 This documents the hardening applied in the code and the **server-side steps
-you must run yourself** (they need SSH/root on `90.156.255.209`, which this
+you must run yourself** (they need SSH/root on `YOUR_SERVER_IP`, which this
 setup no longer has stored). Do the deploy steps below to make the code changes
 take effect on the live site.
 
@@ -28,7 +28,7 @@ to Redis or the limits become per-worker.
 
 ## 1b. Deployed to the live server on 2026-07-10 ✅
 
-All of §1 is **already live** on `90.156.255.209` (deployed over SSH):
+All of §1 is **already live** on `YOUR_SERVER_IP` (deployed over SSH):
 
 - `SECRET_KEY` rotated to a fresh 64-char random key — the JWT-forgery /
   account-takeover hole is closed (verified: a token forged with the old
@@ -39,15 +39,14 @@ All of §1 is **already live** on `90.156.255.209` (deployed over SSH):
 - The strongSwan/IPsec **VPN was left completely untouched** (still active),
   and **no firewall/iptables changes were made** (the VPN depends on those
   rules — see §3a note).
-- One-click delete installed: `teardown.sh` on the server and
-  `destroy-remote.sh` in this repo (see §5).
+- One-click delete installed: `teardown.sh` on the server.
 
 The remaining items in §3 (TLS, edge DDoS, SSH hygiene, key rotation) still
 need doing and are the next priorities.
 
 ## 2. Redeploying after future code changes (run on the server)
 
-On `90.156.255.209`, in the project directory:
+On `YOUR_SERVER_IP`, in the project directory:
 
 ```bash
 # 1. Set a strong, unique JWT key in the server's .env (this rotates it —
@@ -55,7 +54,7 @@ On `90.156.255.209`, in the project directory:
 openssl rand -hex 32          # copy the output
 nano .env                     # set SECRET_KEY=<that value>
                               # set ENVIRONMENT=production
-                              # set CORS_ORIGINS=http://90.156.255.209:3000  (the real frontend origin)
+                              # set CORS_ORIGINS=http://YOUR_SERVER_IP:3000  (the real frontend origin)
                               # leave TRUST_PROXY=false for now
 
 # 2. Rebuild and restart.

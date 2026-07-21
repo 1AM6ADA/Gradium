@@ -19,6 +19,9 @@ npm-debug.log*
 # Demo capture — not needed to run the app
 *.mp4
 
+# Server-specific ops script (kept local; points at your own server)
+destroy-remote.sh
+
 .vscode/
 .idea/
 *.suo
