@@ -1,11 +1,73 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import uuid
+
+import aiofiles
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.session import QuizSession, Participant
 from app.schemas.session import JoinSessionRequest, JoinSessionResponse
+from app.services import ai_service
+from app.services.file_service import (
+    PresentationConversionError,
+    TextExtractionError,
+    UnsupportedGenerationFileType,
+    extract_text_from_pdf,
+    prepare_pdf_for_gemini,
+)
 
 router = APIRouter()
+
+_SUMMARIZE_EXTS = {".pdf", ".pptx", ".ppt", ".txt", ".md"}
+_SUMMARIZE_MAX_BYTES = 25 * 1024 * 1024
+
+
+@router.post("/summarize")
+async def summarize_document(file: UploadFile = File(...)):
+    """Student-facing document summarizer (no auth — same as joining a quiz).
+    Extracts text from the uploaded document and returns an AI summary."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _SUMMARIZE_EXTS:
+        raise HTTPException(status_code=400, detail="Only PDF, PPTX/PPT, TXT and MD files are supported")
+
+    content = await file.read()
+    if len(content) > _SUMMARIZE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large (max 25 MB)")
+
+    if ext in {".txt", ".md"}:
+        text = content.decode("utf-8", errors="replace")
+    else:
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        tmp_path = os.path.join(settings.UPLOAD_DIR, f"summarize_{uuid.uuid4().hex}{ext}")
+        pdf_path = None
+        remove_converted_pdf = False
+        async with aiofiles.open(tmp_path, "wb") as f:
+            await f.write(content)
+        try:
+            pdf_path, remove_converted_pdf = prepare_pdf_for_gemini(
+                file_path=tmp_path,
+                filename=file.filename or tmp_path,
+                output_dir=settings.UPLOAD_DIR,
+            )
+            text = extract_text_from_pdf(pdf_path)
+        except (UnsupportedGenerationFileType, TextExtractionError) as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except PresentationConversionError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            if remove_converted_pdf and pdf_path and os.path.exists(pdf_path):
+                os.remove(pdf_path)
+
+    try:
+        summary = await ai_service.summarize_document_text(text)
+    except ai_service.AIServiceError as e:
+        raise HTTPException(status_code=502, detail=f"Summarization failed: {e}") from e
+
+    return {"summary": summary}
 
 
 @router.get("/session/{code}")

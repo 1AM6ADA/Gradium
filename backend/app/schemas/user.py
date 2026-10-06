@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from app.schemas.common import UtcDatetime
 from typing import Optional
 
 
@@ -19,7 +20,7 @@ class UserOut(BaseModel):
     email: str
     name: str
     is_premium: bool
-    created_at: datetime
+    created_at: UtcDatetime
 
     class Config:
         from_attributes = True
